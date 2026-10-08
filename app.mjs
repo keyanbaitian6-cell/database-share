@@ -83,6 +83,12 @@ async function load() {
   render();
 }
 
+// 切り替えの名前：P-STATIONの貸玉が1つだけなら「P-STATION」（店舗名・日付の見出しには貸玉まで出す）。
+function switchLabel(s, stores) {
+  const pstation = stores.filter(x => x.startsWith('pscube:'));
+  return s.startsWith('pscube:') && pstation.length === 1 ? 'P-STATION' : storeLabel(s, true);
+}
+
 function exportedText(text) {
   const t = Date.parse(text ?? '');
   if (!Number.isFinite(t)) return '';
@@ -116,8 +122,11 @@ function render() {
       <h1 class="headline num">${state.year}年${state.month}月</h1>
       <p class="lede">日付を押すと、その日のTOP10と強かった機種5選が見られます。</p>
     </section>
-    <div class="anchors" role="group" aria-label="店舗">
-      ${model.stores.map(s => `<button type="button" class="anchor" data-store="${esc(s)}" aria-pressed="${s === state.store}">${esc(storeLabel(s, true))}</button>`).join('')}
+    <div class="stores">
+      <span class="caption">店舗を選ぶ</span>
+      <div class="anchors" role="group" aria-label="店舗">
+        ${model.stores.map(s => `<button type="button" class="anchor" data-store="${esc(s)}" aria-pressed="${s === state.store}">${esc(switchLabel(s, model.stores))}</button>`).join('')}
+      </div>
     </div>
     <div class="months">
       <button type="button" class="pill pill-outline" data-month="-1" aria-label="前の月">‹ 前の月</button>
