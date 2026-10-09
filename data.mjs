@@ -41,10 +41,17 @@ export function meruhenRecords(doc) {
       store: raw.store ?? 'nagamachiminami', day: raw.day, machine: raw.machine, rack,
       games: int(raw.games) ?? 0, bb: int(raw.bb) ?? 0, rb: int(raw.rb) ?? 0, output: int(raw.max_hold),
     };
-    const net = meruhenNetDetail(raw.graph_measurement, r.output, r.games);
-    r.net = net.value;
-    r.needsCheck = net.needsCheck;
-    r.estimated = true;
+    // ジャグラーオンラインの差枚（お試し、JUGGLER_ONLINE.md）があれば推定差枚より優先する。
+    if (Number.isInteger(raw.jo_net)) {
+      r.net = raw.jo_net;
+      r.needsCheck = false;
+      r.estimated = false;
+    } else {
+      const net = meruhenNetDetail(raw.graph_measurement, r.output, r.games);
+      r.net = net.value;
+      r.needsCheck = net.needsCheck;
+      r.estimated = true;
+    }
     result.push(r);
   }
   return result;
