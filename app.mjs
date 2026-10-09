@@ -6,7 +6,7 @@
 import {
   MERUHEN_STORES, compactSigned, dayNet, daySummary, displayMachineName, eventLabel, indexRecords,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom,
-} from './data.mjs';
+} from './data.mjs?v=789e85d23233';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
