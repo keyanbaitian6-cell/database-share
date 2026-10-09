@@ -1,11 +1,11 @@
 // 閲覧専用の共有ページ（お試し、2026-10-09。EVENT_CALENDAR.md「閲覧専用の共有ページ」）。
 // 読むだけのApps Script（database_android/tool/viewer_drive_script_readonly.gs）からDriveのファイルを読み、
-// イベントカレンダー（各日のイベント・総差枚）と、日付を押したときのTOP10・強かった機種5選を出す。
+// イベントカレンダー（各日のイベント・総差枚）と、日付を押したときの差枚TOP50（11位からは折りたたみ）・強かった機種10選を出す。
 // 何も書き込まない。端末に覚えるのは接続先（スクリプトのID）と選んだ店だけで、利用者自身の閲覧ページ
 // （database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
 import {
   MERUHEN_STORES, compactSigned, dayNet, daySummary, displayMachineName, eventLabel, indexRecords,
-  meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, viewerNameFrom,
+  meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom,
 } from './data.mjs';
 
 const ID_KEY = 'database-share-script-id';
@@ -120,7 +120,7 @@ function render() {
     <section class="hero">
       <p class="kicker">${esc(storeLabel(state.store))}</p>
       <h1 class="headline num">${state.year}年${state.month}月</h1>
-      <p class="lede">日付を押すと、その日のTOP10と強かった機種5選が見られます。</p>
+      <p class="lede">日付を押すと、その日の差枚TOP50と強かった機種10選が見られます。</p>
     </section>
     <div class="stores">
       <span class="caption">店舗を選ぶ</span>
@@ -142,6 +142,26 @@ function render() {
     </section>`;
 }
 
+const count = (n) => n.toLocaleString('en-US');
+/** 確率（1/○○.○）。当たりが0回なら「—」。 */
+const odds = (games, hits) => (hits > 0 && games > 0 ? `1/${(games / hits).toFixed(1)}` : '—');
+const netCell = (r) => (r.net != null
+  ? `<span class="value num ${tone(r.net)}" style="display:block">${signed(r.net)}${r.needsCheck ? '※' : ''}</span>`
+  : '<span class="value num zero" style="display:block">—</span>');
+
+/** 押せる行の並び。lead＝左の順位、main・right＝中身、attrs＝押したときに読む data-*、current＝印を付ける行。 */
+function tapList(rows, start = 1) {
+  return `<ol class="list"${start > 1 ? ` start="${start}"` : ''}>${rows.map(x => `
+        <li${x.current ? ' class="current"' : ''}><button type="button" class="row" ${x.attrs}>
+          ${x.lead !== '' ? `<span class="rank num">${x.lead}</span>` : ''}<span class="main">${x.main}</span><span class="right">${x.right}</span>
+          <span class="chev" aria-hidden="true">›</span></button></li>`).join('')}</ol>`;
+}
+
+/**
+ * 日付を押したときのシート。その日の差枚TOP50（11位からは折りたたみ）・強かった機種10選 →
+ * 台や機種を押すと、その日のその機種の台一覧 → 台を押すと、その台のその日のデータ（利用者指定 2026-10-10）。
+ * シートの中で画面を重ね、「戻る」で前の画面（開いていた折りたたみ・スクロール位置）へ戻る。
+ */
 function openDay(day) {
   const racks = state.model.byDay.get(`${state.store}|${day}`) ?? [];
   if (!racks.length) return;
@@ -149,36 +169,106 @@ function openDay(day) {
   const {top, machines} = daySummary(racks);
   const estimated = racks.some(r => r.estimated);
   const netName = estimated ? '推定差枚' : '差枚';
+  const outputName = state.store.startsWith('pscube:') ? 'MY' : '最大持玉';
   const event = eventLabel(state.model.events.get(`${state.store}|${day}`));
   const [y, m, d] = day.split('-').map(Number);
   const weekday = WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
-  const backdrop = document.createElement('div');
-  backdrop.className = 'sheet-backdrop';
-  backdrop.innerHTML = `
-    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
-      <div class="sheet-head"><button type="button" class="pill pill-outline" data-close>閉じる</button></div>
+  const dateText = `${m}月${d}日（${weekday}）`;
+  const index = new Map(racks.map((r, i) => [r, i]));
+  const views = [{kind: 'day'}];
+
+  const rankRows = (list, from) => list.map((r, i) => ({
+    lead: from + i + 1, attrs: `data-machine-of="${index.get(r)}"`,
+    main: `<span class="rack num">${r.rack}番</span><span class="machine" style="display:block">${esc(displayMachineName(r.machine))}</span>`,
+    right: `${netCell(r)}<span class="small num">${count(r.games)}G</span>`,
+  }));
+
+  const dayView = () => `
       <p class="store">${esc(storeLabel(state.store))}</p>
-      <h2 id="sheet-title">${m}月${d}日（${weekday}）</h2>
+      <h2 id="sheet-title">${dateText}</h2>
       <p class="event-line">${event ? `イベント：${esc(event)}` : 'イベントなし'}</p>
       ${net.total != null ? `<p class="total"><span class="label">総${netName}</span>
         <span class="value num ${tone(net.total)}">${signed(net.total)}</span>
         <span class="sub num">${netName}がわかった台 ${net.captured}/${net.racks}台</span></p>` : ''}
-      <h3>TOP10</h3>
-      <p class="caption">${netName}の多い順</p>
-      ${top.length ? `<ol class="list">${top.map((r, i) => `
-        <li><span class="rank num">${i + 1}</span>
-          <span class="main"><span class="rack num">${r.rack}番</span><span class="machine" style="display:block">${esc(displayMachineName(r.machine))}</span></span>
-          <span class="right"><span class="value num ${tone(r.net)}" style="display:block">${signed(r.net)}${r.needsCheck ? '※' : ''}</span><span class="small num">${r.games.toLocaleString('en-US')}G</span></span></li>`).join('')}</ol>`
+      <h3>TOP50</h3>
+      <p class="caption">${netName}の多い順。台を押すと、その機種の台一覧が見られます。</p>
+      ${top.length ? tapList(rankRows(top.slice(0, TOP_RACKS_OPEN), 0))
         : '<p class="note">この日は差枚がわかる台がありません。</p>'}
-      <h3>強かった機種5選</h3>
+      ${top.length > TOP_RACKS_OPEN ? `<details class="more"><summary>${TOP_RACKS_OPEN + 1}〜${top.length}位を見る（${top.length - TOP_RACKS_OPEN}台）</summary>
+        ${tapList(rankRows(top.slice(TOP_RACKS_OPEN), TOP_RACKS_OPEN), TOP_RACKS_OPEN + 1)}</details>` : ''}
+      <h3>強かった機種10選</h3>
       <p class="caption">1台あたりの平均回転数（2台以上ある機種）</p>
-      ${machines.length ? `<ol class="list">${machines.map((x, i) => `
-        <li><span class="rank num">${i + 1}</span>
-          <span class="main"><span class="machine" style="display:block">${esc(displayMachineName(x.machine))}</span></span>
-          <span class="right"><span class="value num" style="display:block">${x.average.toLocaleString('en-US')}G</span><span class="small num">${x.racks}台</span></span></li>`).join('')}</ol>`
-        : '<p class="note">2台以上ある機種がありません。</p>'}
-      ${estimated ? '<p class="note">推定差枚はグラフと最大持玉からの計算で、確定値ではありません（※は要確認）。</p>' : ''}
-    </div>`;
+      ${machines.length ? tapList(machines.map((x, i) => ({
+        lead: i + 1, attrs: `data-machine="${esc(x.machine)}"`,
+        main: `<span class="machine" style="display:block">${esc(displayMachineName(x.machine))}</span>`,
+        right: `<span class="value num" style="display:block">${count(x.average)}G</span><span class="small num">${x.racks}台</span>`,
+      }))) : '<p class="note">2台以上ある機種がありません。</p>'}
+      ${estimated ? '<p class="note">推定差枚はグラフと最大持玉からの計算で、確定値ではありません（※は要確認）。</p>' : ''}`;
+
+  const machineView = ({machine, picked}) => {
+    const list = racks.filter(r => r.machine === machine).sort((a, b) => a.rack - b.rack);
+    const nets = list.filter(r => r.net != null);
+    const total = nets.length ? nets.reduce((s, r) => s + r.net, 0) : null;
+    const average = Math.round(list.reduce((s, r) => s + r.games, 0) / list.length);
+    return `
+      <p class="store">${esc(storeLabel(state.store))}　${dateText}</p>
+      <h2 id="sheet-title" class="long">${esc(displayMachineName(machine))}</h2>
+      <p class="event-line num">${list.length}台・平均${count(average)}G</p>
+      ${total != null ? `<p class="total"><span class="label">この機種の総${netName}</span>
+        <span class="value num ${tone(total)}">${signed(total)}</span>
+        <span class="sub num">${netName}がわかった台 ${nets.length}/${list.length}台</span></p>` : ''}
+      <h3>台一覧</h3>
+      <p class="caption">台番号の順。台を押すと、その台のデータが見られます。</p>
+      ${tapList(list.map(r => ({
+        lead: '', attrs: `data-rack="${index.get(r)}"`, current: r === picked,
+        main: `<span class="machine num" style="display:block">${r.rack}番</span><span class="rack num">BB ${r.bb}・RB ${r.rb}</span>`,
+        right: `${netCell(r)}<span class="small num">${count(r.games)}G</span>`,
+      })))}`;
+  };
+
+  const rackView = ({rack: r}) => {
+    const stats = [
+      ['回転数', `${count(r.games)}G`], ['BB', count(r.bb)], ['RB', count(r.rb)],
+      ['BB確率', odds(r.games, r.bb)], ['RB確率', odds(r.games, r.rb)], ['合成確率', odds(r.games, r.bb + r.rb)],
+    ];
+    if (r.output != null) stats.push([outputName, count(r.output)]);
+    const name = r.estimated ? '推定差枚' : '差枚';
+    return `
+      <p class="store">${esc(storeLabel(state.store))}　${dateText}</p>
+      <h2 id="sheet-title">${r.rack}番台</h2>
+      <p class="event-line">${esc(displayMachineName(r.machine))}</p>
+      <p class="total"><span class="label">${name}</span>
+        <span class="value num ${r.net != null ? tone(r.net) : 'zero'}">${r.net != null ? `${signed(r.net)}${r.needsCheck ? '※' : ''}` : '—'}</span>
+        ${r.net == null ? `<span class="sub">${name}はわかりません。</span>` : ''}</p>
+      <dl class="stats">${stats.map(([k, v]) => `<div><dt>${k}</dt><dd class="num">${v}</dd></div>`).join('')}</dl>
+      ${r.estimated && r.net != null ? `<p class="note">推定差枚はグラフと最大持玉からの計算で、確定値ではありません${r.needsCheck ? '（※は要確認）' : ''}。</p>` : ''}`;
+  };
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'sheet-backdrop';
+  backdrop.innerHTML = '<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title"></div>';
+  const sheet = backdrop.firstElementChild;
+  const render = () => {
+    const view = views[views.length - 1];
+    const body = view.kind === 'day' ? dayView() : view.kind === 'machine' ? machineView(view) : rackView(view);
+    sheet.innerHTML = `
+      <div class="sheet-head">${views.length > 1 ? '<button type="button" class="pill pill-outline" data-back>‹ 戻る</button>' : ''}
+        <span class="spacer"></span><button type="button" class="pill pill-outline" data-close>閉じる</button></div>${body}`;
+    if (view.moreOpen) sheet.querySelector('details.more')?.setAttribute('open', '');
+    sheet.scrollTop = view.scroll ?? 0;
+    (sheet.querySelector('[data-back]') ?? sheet.querySelector('[data-close]')).focus({preventScroll: true});
+  };
+  const push = (view) => {
+    const current = views[views.length - 1];
+    current.scroll = sheet.scrollTop;
+    current.moreOpen = sheet.querySelector('details.more')?.open ?? false;
+    views.push(view);
+    render();
+  };
+  const back = () => {
+    views.pop();
+    render();
+  };
   const previous = document.activeElement;
   const close = () => {
     backdrop.remove();
@@ -186,12 +276,25 @@ function openDay(day) {
     document.body.style.overflow = '';
     previous?.focus?.();
   };
-  const onKey = (e) => { if (e.key === 'Escape') close(); };
-  backdrop.addEventListener('click', (e) => { if (e.target === backdrop || e.target.closest('[data-close]')) close(); });
+  const onKey = (e) => {
+    if (e.key !== 'Escape') return;
+    if (views.length > 1) back(); else close();
+  };
+  backdrop.addEventListener('click', (e) => {
+    if (e.target === backdrop || e.target.closest('[data-close]')) return close();
+    if (e.target.closest('[data-back]')) return back();
+    const row = e.target.closest('[data-machine-of], [data-machine], [data-rack]');
+    if (!row) return;
+    if (row.dataset.rack != null) push({kind: 'rack', rack: racks[Number(row.dataset.rack)]});
+    else if (row.dataset.machineOf != null) {
+      const picked = racks[Number(row.dataset.machineOf)];
+      push({kind: 'machine', machine: picked.machine, picked});
+    } else push({kind: 'machine', machine: row.dataset.machine});
+  });
   document.addEventListener('keydown', onKey);
   document.body.style.overflow = 'hidden';
   document.body.append(backdrop);
-  backdrop.querySelector('[data-close]').focus();
+  render();
 }
 
 function showSetup(message) {

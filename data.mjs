@@ -8,6 +8,8 @@ export const MERUHEN_STORES = {
   saiwaichou: {name: 'スーパーメルヘンワールド幸町', short: '幸町'},
 };
 export const STRONG_MACHINE_MIN_RACKS = 2;
+/** 差枚ランキングは50位まで（はじめの10位までを開いて見せ、残りは折りたたむ）。強かった機種は10位まで。 */
+export const TOP_RACKS = 50, TOP_RACKS_OPEN = 10, TOP_MACHINES = 10;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 /** 画面に出す機種名：半角カナだけ全角にそろえる（list_views.displayMachineName と同じ）。 */
@@ -94,10 +96,10 @@ export function dayNet(racks) {
   return {total: nets.length ? nets.reduce((s, r) => s + r.net, 0) : null, captured: nets.length, racks: racks.length};
 }
 
-/** その日のTOP10（差枚の多い順）と強かった機種5選（1台あたりの平均回転数、2台以上の機種）。 */
+/** その日の差枚TOP50（差枚の多い順）と強かった機種10選（1台あたりの平均回転数、2台以上の機種）。 */
 export function daySummary(racks) {
   const top = racks.filter(r => r.net != null).sort((a, b) =>
-    b.net - a.net || b.games - a.games || a.rack - b.rack).slice(0, 10);
+    b.net - a.net || b.games - a.games || a.rack - b.rack).slice(0, TOP_RACKS);
   const byMachine = new Map();
   for (const r of racks) {
     if (!byMachine.has(r.machine)) byMachine.set(r.machine, []);
@@ -107,7 +109,7 @@ export function daySummary(racks) {
     .map(([machine, list]) => ({machine, racks: list.length,
       average: Math.round(list.reduce((s, r) => s + r.games, 0) / list.length)}))
     .sort((a, b) => b.average - a.average || b.racks - a.racks || (a.machine < b.machine ? -1 : a.machine > b.machine ? 1 : 0))
-    .slice(0, 5);
+    .slice(0, TOP_MACHINES);
   return {top, machines};
 }
 
