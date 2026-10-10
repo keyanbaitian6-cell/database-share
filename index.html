@@ -174,6 +174,21 @@
   .more[open] summary::after { transform: rotate(45deg); margin-bottom: 5px; }
   .more .list { margin-top: 6px; }
   .sheet-head .spacer { flex: 1; }
+  .tools { text-align: center; padding: 16px var(--gutter) 0; }
+  .choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 18px 0 12px; }
+  .choices label { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .choices label span { font-size: 12px; line-height: 16px; letter-spacing: -0.12px; color: var(--color-slate); }
+  .choices select {
+    width: 100%; min-width: 0; height: 40px; padding: 0 8px; border: 1px solid var(--color-steel); border-radius: 10px;
+    background: #fff; color: var(--color-ink); font: 15px/1.2 var(--font-text);
+  }
+  .choices select:focus { outline: 2px solid var(--color-pricing-blue); outline-offset: 1px; }
+  /* 狭い画面では日付を1行目に広く、期間・ゲーム数を2行目に並べる（選択欄の文字が切れないように）。 */
+  @media (max-width: 480px) {
+    .choices { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .choices label:first-child { grid-column: 1 / -1; }
+  }
+  .list .detail { display: block; font-size: 12px; line-height: 1.4; letter-spacing: -0.12px; color: var(--color-slate); margin-top: 2px; white-space: normal; }
   .sheet h2.long { font-size: 28px; line-height: 1.18; word-break: break-word; }
   .stats {
     display: grid; grid-template-columns: 1fr 1fr; gap: 1px; margin: 28px 0 0;
@@ -214,10 +229,10 @@
 <main id="app"><p class="status">読み込んでいます…<br>最初の読み込みは、1分ほどかかることがあります。</p></main>
 <footer>
   <p>Googleドライブから読むため、最初の読み込みや「最新を読む」は、1分ほどかかることがあります。</p>
-  <p>このページは見るだけです。イベントの入力や記録の変更はできません。記録はGoogleドライブから読み、この端末には接続先だけを覚えます。</p>
+  <p>このページは見るだけです。イベントの入力や記録の変更はできません。記録はGoogleドライブから読み、この端末には接続先と表示の選択（店舗・回っていない台の期間とゲーム数）だけを覚えます。</p>
   <p>差枚＝その日の総差枚（差枚がわかった台の合計）。メルヘンはグラフと最大持玉からの推定差枚で、確定値ではありません（※は要確認）。P-STATIONは元グラフの差枚です。</p>
   <p>＊＝前日までに入力した記録がないイベント（当日以降の入力・時刻不明）。強かった機種＝1台あたりの平均回転数（2台以上ある機種）。</p>
 </footer>
-<script type="module" src="./app.mjs?v=789e85d23233"></script>
+<script type="module" src="./app.mjs?v=551caff3fef6"></script>
 </body>
 </html>
