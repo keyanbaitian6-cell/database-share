@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail} from './net.mjs?v=551caff3fef6';
+import {meruhenNetDetail} from './net.mjs?v=042353c43dd9';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -55,6 +55,8 @@ export function meruhenRecords(doc) {
     const r = {
       store: raw.store ?? 'nagamachiminami', day: raw.day, machine: raw.machine, rack,
       games: int(raw.games) ?? 0, bb: int(raw.bb) ?? 0, rb: int(raw.rb) ?? 0, output: int(raw.max_hold),
+      // 確定が出た台の印🌈（PCで付ける。RAINBOW.md）。
+      rainbow: raw.rainbow === true,
     };
     // ジャグラーオンラインの差枚（お試し、JUGGLER_ONLINE.md）があれば推定差枚より優先する。
     if (Number.isInteger(raw.jo_net)) {
@@ -70,6 +72,39 @@ export function meruhenRecords(doc) {
     result.push(r);
   }
   return result;
+}
+
+export const RAINBOW = '🌈';
+
+/** 台番号の横の印（確定が出た台は🌈）。 */
+export const rackMark = (r) => (r.rainbow ? RAINBOW : '');
+
+/** その店に🌈の付いた台が1台でもあるか（無い店では最終🌈の欄を出さない）。 */
+export function storeHasRainbow(byDay, store) {
+  for (const [key, racks] of byDay) if (key.startsWith(`${store}|`) && racks.some((r) => r.rainbow)) return true;
+  return false;
+}
+
+/**
+ * 最終🌈：同じ店・同じ台番号で、day 以前に最後に🌈が付いた日（無ければ null）。台番号で見る
+ * （PC版 last_rainbow_days・閲覧ページ lastRainbowDay と同じ）。
+ */
+export function lastRainbowDay(byDay, store, rack, day) {
+  let last = null;
+  for (const [key, racks] of byDay) {
+    const [s, d] = key.split('|');
+    if (s !== store || d > day || (last && d <= last)) continue;
+    if (racks.some((r) => r.rack === rack && r.rainbow)) last = d;
+  }
+  return last;
+}
+
+/** 最終🌈の表示：その日なら「当日」、前の日なら「9/26（15日前）」、無ければ「なし」。 */
+export function lastRainbowText(last, day) {
+  if (!last) return 'なし';
+  if (last === day) return '当日';
+  const days = Math.round((Date.parse(`${day}T00:00:00Z`) - Date.parse(`${last}T00:00:00Z`)) / 86400000);
+  return `${Number(last.slice(5, 7))}/${Number(last.slice(8, 10))}（${days}日前）`;
 }
 
 /** P’s CUBEの閲覧用ファイル（pscube-viewer-drive.json）の台。差枚は元グラフの差枚。店舗は `pscube:店:貸玉`。 */

@@ -8,7 +8,8 @@ import {
   MERUHEN_STORES, compactSigned, dayNet, daySummary, displayMachineName, eventLabel, indexRecords,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom,
   IDLE_DAY_CHOICES, IDLE_DEFAULT_DAYS, IDLE_DEFAULT_GAMES, IDLE_GAMES_CHOICES, idleVarietyRacks, storeDays,
-} from './data.mjs?v=551caff3fef6';
+  RAINBOW, lastRainbowDay, lastRainbowText, rackMark, storeHasRainbow,
+} from './data.mjs?v=042353c43dd9';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -184,8 +185,10 @@ function rackView({rack: r}) {
   const name = r.estimated ? '推定差枚' : '差枚';
   return `
       <p class="store">${esc(storeLabel(r.store))}　${dateLabel(r.day)}</p>
-      <h2 id="sheet-title">${r.rack}番台</h2>
+      <h2 id="sheet-title">${r.rack}番台${r.rainbow ? ` ${RAINBOW}` : ''}</h2>
       <p class="event-line">${esc(displayMachineName(r.machine))}</p>
+      ${storeHasRainbow(state.model.byDay, r.store)
+        ? `<p class="event-line last-rainbow">最終${RAINBOW}：${lastRainbowText(lastRainbowDay(state.model.byDay, r.store, r.rack, r.day), r.day)}</p>` : ''}
       <p class="total"><span class="label">${name}</span>
         <span class="value num ${r.net != null ? tone(r.net) : 'zero'}">${r.net != null ? `${signed(r.net)}${r.needsCheck ? '※' : ''}` : '—'}</span>
         ${r.net == null ? `<span class="sub">${name}はわかりません。</span>` : ''}</p>
@@ -271,7 +274,7 @@ function openDay(day) {
 
   const rankRows = (list, from) => list.map((r, i) => ({
     lead: from + i + 1, attrs: `data-machine-of="${index.get(r)}"`,
-    main: `<span class="rack num">${r.rack}番</span><span class="machine" style="display:block">${esc(displayMachineName(r.machine))}</span>`,
+    main: `<span class="rack num">${r.rack}番${rackMark(r)}</span><span class="machine" style="display:block">${esc(displayMachineName(r.machine))}</span>`,
     right: `${netCell(r)}<span class="small num">${count(r.games)}G</span>`,
   }));
 
@@ -313,7 +316,7 @@ function openDay(day) {
       <p class="caption">台番号の順。台を押すと、その台のデータが見られます。</p>
       ${tapList(list.map(r => ({
         lead: '', attrs: `data-rack="${index.get(r)}"`, current: r === picked,
-        main: `<span class="machine num" style="display:block">${r.rack}番</span><span class="rack num">BB ${r.bb}・RB ${r.rb}</span>`,
+        main: `<span class="machine num" style="display:block">${r.rack}番${rackMark(r)}</span><span class="rack num">BB ${r.bb}・RB ${r.rb}</span>`,
         right: `${netCell(r)}<span class="small num">${count(r.games)}G</span>`,
       })))}`;
   };
@@ -367,7 +370,7 @@ function openIdle() {
       <p class="caption">バラエティ（その日1〜3台の機種）の台で、選んだ日から前へ${view.minDays}日（カレンダーの日数）以上、毎日${games}未満の台です。記録の無い日（サイトが落ちていた日など）は飛ばして数えます。期間の長い順。台を押すとその台のデータが見られます。</p>
       ${racks.length ? `<h3 class="num">${racks.length}台</h3>${tapList(racks.map((x, i) => ({
         lead: '', attrs: `data-idle-rack="${i}"`,
-        main: `<span class="rack num">${x.latest.rack}番</span><span class="machine" style="display:block">${esc(displayMachineName(x.latest.machine))}</span>`
+        main: `<span class="rack num">${x.latest.rack}番${rackMark(x.latest)}</span><span class="machine" style="display:block">${esc(displayMachineName(x.latest.machine))}</span>`
           + `<span class="detail num">${x.span}日間 ${games}未満（${shortDate(x.from)}〜${x.days.length < x.span ? `、記録のある日${x.days.length}日` : ''}）・最多${count(x.maxGames)}G<br>`
           + `${x.days.slice(0, 7).map(r => count(r.games)).join('・')}G${x.days.length > 7 ? '…' : ''}</span>`,
         right: `<span class="value num" style="display:block">${count(x.latest.games)}G</span>`,
