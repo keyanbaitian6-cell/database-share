@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail} from './net.mjs?v=3aeffddf8c06';
+import {meruhenNetDetail} from './net.mjs?v=9b308f9f8ddb';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -364,14 +364,15 @@ function rainbowHistory(byDay, store, day) {
  * 最終🌈（last、その日以前）と30日の🌈の日数（count）。台番号の順。
  */
 export function varietyRainbowRows(byDay, store, day) {
-  const latest = storeDays(byDay, store)[0];
+  const latest = lineupDay(byDay, store);
   if (!latest) return [];
   const lineup = byDay.get(`${store}|${latest}`) ?? [];
   const counts = new Map();
   for (const r of lineup) counts.set(r.machine, (counts.get(r.machine) ?? 0) + 1);
   const onDay = new Map((byDay.get(`${store}|${day}`) ?? []).map(r => [r.rack, r]));
   const {last, counts: rainbowCounts} = rainbowHistory(byDay, store, day);
-  return lineup.filter(r => counts.get(r.machine) <= VARIETY_MAX_RACKS)
+  const max = rainbowVarietyMax(store);
+  return lineup.filter(r => counts.get(r.machine) <= max)
     .map(current => {
       const record = onDay.get(current.rack) ?? null;
       return {rack: current.rack, machine: current.machine, record,
@@ -379,6 +380,58 @@ export function varietyRainbowRows(byDay, store, day) {
         last: last.get(current.rack) ?? null, count: rainbowCounts.get(current.rack) ?? 0};
     })
     .sort((a, b) => a.rack - b.rack);
+}
+
+/**
+ * 🌈の一覧で「バラエティ」とする台数（2026-10-12 利用者「幸町のバラエティは1台機種限定にして欲しい」）。幸町は1台だけの機種、
+ * ほかの店は1〜3台（VARIETY_MAX_RACKS）。回っていない台・翌日候補の「バラエティ」は1〜3台のまま。PC版
+ * variety_rainbow.RAINBOW_VARIETY_MAX_RACKS と同じ。
+ */
+export const RAINBOW_VARIETY_MAX_RACKS = {saiwaichou: 1};
+export const rainbowVarietyMax = (store) => RAINBOW_VARIETY_MAX_RACKS[store] ?? VARIETY_MAX_RACKS;
+
+/** ローテーション表の日数（選んだ日を右端に、カレンダーの日数で7日）。 */
+export const ROTATION_DAYS = 7;
+
+/** [day] を右端にした [n] 日（カレンダーの日、古い順）。 */
+export function windowDays(day, n = ROTATION_DAYS) {
+  const end = Date.parse(`${day}T00:00:00Z`);
+  return Array.from({length: n}, (_, i) => new Date(end - (n - 1 - i) * 86400000).toISOString().slice(0, 10));
+}
+
+/**
+ * ローテーション表の1台分：[days] の各日の、同じ台番号の記録（無ければ null）。🌈は record.rainbow。
+ * 台番号で見る（機種が入れ替わっても同じ台番号なら続けて並べる。最終🌈と同じ）。
+ */
+export function rackDays(byDay, store, rack, days) {
+  return days.map(d => (byDay.get(`${store}|${d}`) ?? []).find(r => r.rack === rack) ?? null);
+}
+
+/** 最後の🌈から何日（[day] に付いていれば0、一度も無ければ null）。 */
+export function daysSinceRainbow(last, day) {
+  if (!last) return null;
+  return Math.round((Date.parse(`${day}T00:00:00Z`) - Date.parse(`${last}T00:00:00Z`)) / 86400000);
+}
+
+/** 空き順：最後の🌈から長い台が上（一度も無い台がいちばん上、同じなら台番号の順）。 */
+export function byLongestGap(rows, day) {
+  const gap = (x) => {
+    const n = daysSinceRainbow(x.last, day);
+    return n == null ? Infinity : n;
+  };
+  return [...rows].sort((a, b) => gap(b) - gap(a) || a.rack - b.rack);
+}
+
+/**
+ * バラエティ🌈の並べる台を取る日：新しい日から見て、その店のふだんの台数（直近14日でいちばん多い日）の8割以上の記録がある日
+ * （2026-10-12、サイトが落ちていて一部しか取れていない日の並びにしない）。PC版 variety_rainbow.lineup_day と同じ。
+ */
+export function lineupDay(byDay, store) {
+  const days = storeDays(byDay, store).slice(0, 14);
+  if (!days.length) return null;
+  const counts = days.map(d => (byDay.get(`${store}|${d}`) ?? []).length);
+  const usual = Math.max(...counts);
+  return days[counts.findIndex(n => n >= usual * 0.8)];
 }
 
 /** 並べ方（PCと同じ）。 */
