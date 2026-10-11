@@ -1,21 +1,26 @@
 // 閲覧専用の共有ページ（お試し、2026-10-09。EVENT_CALENDAR.md「閲覧専用の共有ページ」）。
 // 読むだけのApps Script（database_android/tool/viewer_drive_script_readonly.gs）からDriveのファイルを読み、
 // イベントカレンダー（各日のイベント・総差枚）と、日付を押したときの差枚TOP50（11位からは折りたたみ）・強かった機種10選、
-// バラエティの回っていない台（期間・ゲーム数を選べる）を出す。
-// 何も書き込まない。端末に覚えるのは接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数だけで、利用者自身の閲覧ページ
-// （database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
+// バラエティの回っていない台（期間・ゲーム数を選べる）、バラエティ🌈（確定が出た台の印を付ける一覧）を出す。
+// 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
+// 端末に覚えるのは接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
+// 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
 import {
   MERUHEN_STORES, compactSigned, dayNet, daySummary, displayMachineName, eventLabel, indexRecords,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom,
   IDLE_DAY_CHOICES, IDLE_DEFAULT_DAYS, IDLE_DEFAULT_GAMES, IDLE_GAMES_CHOICES, idleVarietyRacks, storeDays,
   RAINBOW, lastRainbowDay, lastRainbowText, rackMark, storeHasRainbow,
-} from './data.mjs?v=042353c43dd9';
+  RAINBOW_COUNT_DAYS, VARIETY_SORTS, applyRainbowMarks, markTime, mergeMarks, varietyRainbowRows,
+} from './data.mjs?v=3aeffddf8c06';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
 // 渡したリンクの呼び名（# の u=）。最初の読み込みにだけ付けて送り、スクリプトが「実行数」に記録する。
 const NAME_KEY = 'database-share-name';
 const NAME = /^[A-Za-z0-9_-]{1,40}$/;
+// この端末で付け外しした🌈（送れなかった分も次に送る）と、バラエティ🌈の並べ方。
+const MARKS_KEY = 'database-share-rainbow';
+const VARIETY_SORT_KEY = 'database-share-variety-sort';
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
 const RETRY_MS = [1500, 4000];
 const TIMEOUT_MS = 30000;
@@ -62,8 +67,9 @@ async function load() {
     app.innerHTML = '<p class="status">Googleドライブから読み込んでいます…<br>最初の読み込みは、1分ほどかかることがあります。</p>';
   }
   const base = `https://script.google.com/macros/s/${state.id}/exec`;
-  const [meruhen, pscube, events, pscubeEvents] = await Promise.allSettled(
-    [state.name ? `?u=${state.name}` : '', '?file=pscube', '?file=events', '?file=pscube-events'].map(q => getJson(base + q)));
+  const [meruhen, pscube, events, pscubeEvents, rainbow] = await Promise.allSettled(
+    [state.name ? `?u=${state.name}` : '', '?file=pscube', '?file=events', '?file=pscube-events', '?file=rainbow']
+      .map(q => getJson(base + q)));
   state.loading = false;
   reload.disabled = false;
   const doc = (r) => (r.status === 'fulfilled' && r.value && !r.value.error ? r.value : null);
@@ -75,6 +81,9 @@ async function load() {
   }
   const records = [...meruhenRecords(m), ...pscubeRecords(p)];
   const byDay = indexRecords(records);
+  // ほかの端末（閲覧ページ・共有ページ）で付け外しした🌈と、この端末の分（PCが取り込む前でも出す）。
+  const sharedMarks = doc(rainbow)?.marks;
+  applyRainbowMarks(byDay, mergeMarks(Array.isArray(sharedMarks) ? sharedMarks : [], localMarks()));
   const stores = [...Object.keys(MERUHEN_STORES), ...new Set(records.map(r => r.store).filter(s => s.startsWith('pscube:')))]
     .filter(s => records.some(r => r.store === s));
   state.model = {
@@ -133,6 +142,7 @@ function render() {
     </div>
     <div class="tools">
       <button type="button" class="pill pill-outline" data-idle-open>バラエティの回っていない台</button>
+      ${Object.hasOwn(MERUHEN_STORES, state.store) ? `<button type="button" class="pill pill-outline" data-variety-open>バラエティ${RAINBOW}</button>` : ''}
     </div>
     <div class="months">
       <button type="button" class="pill pill-outline" data-month="-1" aria-label="前の月">‹ 前の月</button>
@@ -187,6 +197,7 @@ function rackView({rack: r}) {
       <p class="store">${esc(storeLabel(r.store))}　${dateLabel(r.day)}</p>
       <h2 id="sheet-title">${r.rack}番台${r.rainbow ? ` ${RAINBOW}` : ''}</h2>
       <p class="event-line">${esc(displayMachineName(r.machine))}</p>
+      ${rainbowButton(r, 'large')}
       ${storeHasRainbow(state.model.byDay, r.store)
         ? `<p class="event-line last-rainbow">最終${RAINBOW}：${lastRainbowText(lastRainbowDay(state.model.byDay, r.store, r.rack, r.day), r.day)}</p>` : ''}
       <p class="total"><span class="label">${name}</span>
@@ -241,6 +252,15 @@ function openSheet({first, body, onRow, onChange}) {
   backdrop.addEventListener('click', (e) => {
     if (e.target === backdrop || e.target.closest('[data-close]')) return close();
     if (e.target.closest('[data-back]')) return back();
+    // 🌈のボタン（台のデータ・バラエティ🌈）：付け外しして、同じ画面を描き直す。
+    const mark = e.target.closest('[data-rainbow]');
+    if (mark) {
+      const view = views[views.length - 1];
+      view.scroll = sheet.scrollTop;
+      mark.disabled = true;
+      toggleRainbow(mark.dataset.rainbow).finally(render);
+      return;
+    }
     const row = e.target.closest('button.row');
     if (row) onRow(row, push);
   });
@@ -402,6 +422,115 @@ function openIdle() {
   });
 }
 
+/** この端末で付け外しした🌈。 */
+function localMarks() {
+  try {
+    const list = JSON.parse(store.get(MARKS_KEY) ?? '[]');
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+/** 🌈を付ける・外すボタン（メルヘンの台だけ）。押すと toggleRainbow。 */
+function rainbowButton(r, size = 'small') {
+  if (!Object.hasOwn(MERUHEN_STORES, r.store)) return '';
+  const label = r.rainbow ? `${RAINBOW} 外す` : `${RAINBOW} 付ける`;
+  return `<button type="button" class="pill ${r.rainbow ? 'pill-blue' : 'pill-outline'} mark-btn ${size}" `
+    + `data-rainbow="${esc(`${r.store}|${r.day}|${r.rack}`)}" aria-pressed="${r.rainbow}" aria-label="${r.rack}番台の${label}">${label}</button>`;
+}
+
+/** 知らせ（数秒で消える）。 */
+function toast(text) {
+  document.querySelector('.toast')?.remove();
+  const el = document.createElement('p');
+  el.className = 'toast';
+  el.setAttribute('role', 'status');
+  el.textContent = text;
+  document.body.append(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+/**
+ * 🌈を付け外しする（2026-10-11、RAINBOW.md「共有ページから付ける」）。すぐ表示に入れ、この端末に残し、
+ * スクリプトへこの端末の印を全部送る（送れなかった分も次に届く）。PCは同期フォルダに届いたファイルを取り込む。
+ */
+async function toggleRainbow(key) {
+  const [s, day, rackText] = key.split('|');
+  const rack = Number(rackText);
+  const r = (state.model?.byDay.get(`${s}|${day}`) ?? []).find(x => x.rack === rack);
+  if (!r) return;
+  const old = localMarks().find(m => m.store === s && m.day === day && m.rack === rack);
+  const mark = {store: s, day, rack, on: !r.rainbow, updated_at: markTime(Date.now(), r.rainbowAt, old?.updated_at)};
+  r.rainbow = mark.on;
+  r.rainbowAt = mark.updated_at;
+  const marks = mergeMarks(localMarks(), [mark]);
+  store.set(MARKS_KEY, JSON.stringify(marks));
+  const done = mark.on ? `${rack}番台に${RAINBOW}を付けました。` : `${rack}番台の${RAINBOW}を外しました。`;
+  try {
+    const response = await fetch(`https://script.google.com/macros/s/${state.id}/exec`, {
+      method: 'POST', headers: {'Content-Type': 'text/plain;charset=utf-8'}, credentials: 'omit',
+      body: JSON.stringify({file: 'rainbow', marks}),
+    });
+    const result = await response.json();
+    toast(result.ok ? `${done}共有しました。` : `${done}（この端末には残しました。共有には送れませんでした：${result.error ?? '返事が読めません'}）`);
+  } catch (error) {
+    toast(`${done}（この端末には残しました。共有には送れませんでした。次に付け外しするときにまた送ります）`);
+  }
+}
+
+const VARIETY_SORT_NAMES = Object.keys(VARIETY_SORTS);
+
+/**
+ * バラエティ🌈（2026-10-11 利用者「共有の方にも店舗別のバラエティ一覧つけて同じようにしたい」）。PCのバラエティ🌈の
+ * タブと同じ：並べる台と機種名はその店の最新の記録の日のバラエティ、数値と🌈は選んだ日。右の🌈を押すと付け外し、
+ * 行を押すとその台のデータ。
+ */
+function openVariety() {
+  const days = storeDays(state.model.byDay, state.store);
+  if (!days.length) return;
+  const savedSort = store.get(VARIETY_SORT_KEY);
+  const first = {kind: 'variety', day: days[0], sort: VARIETY_SORT_NAMES.includes(savedSort) ? savedSort : '台番順'};
+  const varietyView = (view) => {
+    const rows = varietyRainbowRows(state.model.byDay, state.store, view.day).sort(VARIETY_SORTS[view.sort]);
+    view.rows = rows;
+    const machines = new Set(rows.map(x => x.machine)).size;
+    const marked = rows.filter(x => x.record?.rainbow).length;
+    return `
+      <p class="store">${esc(storeLabel(state.store))}</p>
+      <h2 id="sheet-title" class="long">バラエティの${RAINBOW}</h2>
+      <div class="choices two">
+        <label><span>日付</span><select data-variety="day">${options(days, view.day, shortDateWeek)}</select></label>
+        <label><span>並べ方</span><select data-variety="sort">${options(VARIETY_SORT_NAMES, view.sort, s => s)}</select></label>
+      </div>
+      <p class="caption">最新の記録の日に1〜3台の機種の台です（入れ替えは自動で変わります）。数値と${RAINBOW}は選んだ日のもの。右の${RAINBOW}を押すと付け外し、行を押すとその台のデータ。最終${RAINBOW}＝その台番号に最後に付いた日、${RAINBOW_COUNT_DAYS}日＝その日までの${RAINBOW_COUNT_DAYS}日の${RAINBOW}の日数。</p>
+      ${rows.length ? `<h3 class="num">${rows.length}台（${machines}機種）・この日の${RAINBOW} ${marked}台</h3>
+      <ol class="list">${rows.map((x, i) => {
+        const r = x.record;
+        const numbers = r ? `${count(r.games)}G・${r.net != null ? `${r.estimated ? '推定' : ''}${signed(r.net)}${r.needsCheck ? '※' : ''}` : '差枚—'}` : 'この日の記録なし';
+        const machine = esc(displayMachineName(x.machine)) + (x.dayMachine ? `（この日：${esc(displayMachineName(x.dayMachine))}）` : '');
+        return `<li class="with-mark">${r ? `<button type="button" class="row" data-variety-rack="${i}">` : '<div class="row">'}
+          <span class="main"><span class="rack num">${x.rack}番${r?.rainbow ? RAINBOW : ''}</span><span class="machine" style="display:block">${machine}</span>
+          <span class="detail num">${numbers}・最終${RAINBOW} ${lastRainbowText(x.last, view.day)}・${RAINBOW_COUNT_DAYS}日 ${x.count}</span></span>
+          ${r ? '<span class="chev" aria-hidden="true">›</span></button>' : '</div>'}${r ? rainbowButton(r) : ''}</li>`;
+      }).join('')}</ol>` : '<p class="note">この店はバラエティの台の記録がありません。</p>'}`;
+  };
+  openSheet({
+    first,
+    body: (view) => (view.kind === 'variety' ? varietyView(view) : rackView(view)),
+    onRow: (row, push) => {
+      if (row.dataset.varietyRack != null) push({kind: 'rack', rack: first.rows[Number(row.dataset.varietyRack)].record});
+    },
+    onChange: (select, view) => {
+      if (select.dataset.variety === 'day') view.day = select.value;
+      if (select.dataset.variety === 'sort') {
+        view.sort = select.value;
+        store.set(VARIETY_SORT_KEY, view.sort);
+      }
+    },
+  });
+}
+
 function showSetup(message) {
   state.model = null;
   reload.hidden = true;
@@ -437,10 +566,11 @@ function connect(id) {
 }
 
 app.addEventListener('click', (e) => {
-  const target = e.target.closest('[data-open], [data-store], [data-month], [data-idle-open]');
+  const target = e.target.closest('[data-open], [data-store], [data-month], [data-idle-open], [data-variety-open]');
   if (!target || !state.model) return;
   if (target.dataset.open) { openDay(target.dataset.open); return; }
   if (target.dataset.idleOpen != null) { openIdle(); return; }
+  if (target.dataset.varietyOpen != null) { openVariety(); return; }
   if (target.dataset.store) {
     state.store = target.dataset.store;
     store.set(STORE_KEY, state.store);

@@ -174,7 +174,17 @@
   .more[open] summary::after { transform: rotate(45deg); margin-bottom: 5px; }
   .more .list { margin-top: 6px; }
   .sheet-head .spacer { flex: 1; }
-  .tools { text-align: center; padding: 16px var(--gutter) 0; }
+  .tools { text-align: center; padding: 16px var(--gutter) 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+  /* 🌈のボタン（台のデータ・バラエティ🌈の行の右）。 */
+  .mark-btn { flex: none; white-space: nowrap; }
+  .mark-btn.small { padding: 6px 12px; font-size: 13px; }
+  .mark-btn.large { margin: 4px 0 8px; }
+  .list li.with-mark { display: flex; align-items: center; gap: 8px; }
+  .list li.with-mark > .row { flex: 1; min-width: 0; }
+  .list li.with-mark > div.row { display: flex; align-items: center; padding: 12px 0; }
+  .choices.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 50; max-width: calc(100vw - 32px);
+    margin: 0; padding: 10px 16px; border-radius: 12px; background: rgba(29, 29, 31, .92); color: #fff; font-size: 13px; line-height: 1.4; }
   .choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 18px 0 12px; }
   .choices label { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
   .choices label span { font-size: 12px; line-height: 16px; letter-spacing: -0.12px; color: var(--color-slate); }
@@ -233,6 +243,6 @@
   <p>差枚＝その日の総差枚（差枚がわかった台の合計）。メルヘンはグラフと最大持玉からの推定差枚で、確定値ではありません（※は要確認）。P-STATIONは元グラフの差枚です。</p>
   <p>＊＝前日までに入力した記録がないイベント（当日以降の入力・時刻不明）。強かった機種＝1台あたりの平均回転数（2台以上ある機種）。</p>
 </footer>
-<script type="module" src="./app.mjs?v=042353c43dd9"></script>
+<script type="module" src="./app.mjs?v=3aeffddf8c06"></script>
 </body>
 </html>

@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail} from './net.mjs?v=042353c43dd9';
+import {meruhenNetDetail} from './net.mjs?v=3aeffddf8c06';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -55,8 +55,9 @@ export function meruhenRecords(doc) {
     const r = {
       store: raw.store ?? 'nagamachiminami', day: raw.day, machine: raw.machine, rack,
       games: int(raw.games) ?? 0, bb: int(raw.bb) ?? 0, rb: int(raw.rb) ?? 0, output: int(raw.max_hold),
-      // 確定が出た台の印🌈（PCで付ける。RAINBOW.md）。
+      // 確定が出た台の印🌈（PCで付ける。RAINBOW.md）と、付け外しした時刻（iPhone・共有ページの印と比べる）。
       rainbow: raw.rainbow === true,
+      rainbowAt: typeof raw.rainbow_at === 'string' ? raw.rainbow_at : null,
     };
     // ジャグラーオンラインの差枚（お試し、JUGGLER_ONLINE.md）があれば推定差枚より優先する。
     if (Number.isInteger(raw.jo_net)) {
@@ -280,3 +281,110 @@ export function idleVarietyRacks(byDay, store, day, {minDays = IDLE_DEFAULT_DAYS
   }
   return result.sort((a, b) => b.span - a.span || a.latest.rack - b.latest.rack);
 }
+
+/*
+ * 共有ページから🌈を付ける（2026-10-11 利用者「この虹マークを付けるだけの機能なら共有の方にもつけたい」
+ * 「共有の方にも店舗別のバラエティ一覧つけて同じようにしたい」、RAINBOW.md「共有ページから付ける」）。
+ * 印は {store, day, rack, on, updated_at}。台の記録の rainbowAt（PCで付け外しした時刻）より新しい印だけ表示に使う。
+ */
+
+/** ISOの時刻をミリ秒に（小数6桁などは3桁にそろえる：iPhoneのSafariで読めるように）。読めなければ NaN。 */
+export function isoTime(text) {
+  if (typeof text !== 'string') return NaN;
+  return Date.parse(text.replace(/(\.\d{3})\d+/, '$1'));
+}
+
+/** 印の形を確かめる（メルヘンの店だけ）。 */
+export function validMark(m) {
+  return !!m && typeof m === 'object' && Object.hasOwn(MERUHEN_STORES, m.store) && DAY.test(m.day ?? '')
+    && Number.isInteger(m.rack) && m.rack > 0 && typeof m.on === 'boolean' && Number.isFinite(isoTime(m.updated_at));
+}
+
+/** 印を台に反映する（台の rainbowAt より新しいものだけ）。変えた台の数を返す。 */
+export function applyRainbowMarks(byDay, marks) {
+  let changed = 0;
+  for (const m of marks) {
+    if (!validMark(m)) continue;
+    for (const r of byDay.get(`${m.store}|${m.day}`) ?? []) {
+      if (r.rack !== m.rack) continue;
+      if (r.rainbowAt && !(isoTime(m.updated_at) > isoTime(r.rainbowAt))) continue;
+      r.rainbow = m.on;
+      r.rainbowAt = m.updated_at;
+      changed++;
+    }
+  }
+  return changed;
+}
+
+/** 印を [into] に足す（同じ店・日・台は時刻の新しい方）。 */
+export function mergeMarks(into, incoming) {
+  const map = new Map(into.filter(validMark).map(m => [`${m.store}|${m.day}|${m.rack}`, m]));
+  for (const m of incoming) {
+    if (!validMark(m)) continue;
+    const key = `${m.store}|${m.day}|${m.rack}`;
+    const old = map.get(key);
+    if (old && isoTime(m.updated_at) < isoTime(old.updated_at)) continue;
+    map.set(key, m);
+  }
+  return [...map.values()];
+}
+
+/** 新しく付け外しするときの時刻：今（台の rainbowAt・前の印より必ず後）。 */
+export function markTime(now, ...previous) {
+  let at = now;
+  for (const p of previous) {
+    const t = isoTime(p);
+    if (Number.isFinite(t) && at <= t) at = t + 1;
+  }
+  return new Date(at).toISOString();
+}
+
+/** 🌈の回数を数える日数（選んだ日を含めて30日、PCのバラエティ🌈と同じ）。 */
+export const RAINBOW_COUNT_DAYS = 30;
+
+/** 店の台番号ごとの、[day] 以前の最後の🌈と、[day] までの30日の🌈の日数。 */
+function rainbowHistory(byDay, store, day) {
+  const from = new Date(Date.parse(`${day}T00:00:00Z`) - (RAINBOW_COUNT_DAYS - 1) * 86400000).toISOString().slice(0, 10);
+  const last = new Map(), counts = new Map();
+  for (const [key, racks] of byDay) {
+    const [s, d] = key.split('|');
+    if (s !== store || d > day) continue;
+    for (const r of racks) {
+      if (!r.rainbow) continue;
+      if (!last.has(r.rack) || last.get(r.rack) < d) last.set(r.rack, d);
+      if (d >= from) counts.set(r.rack, (counts.get(r.rack) ?? 0) + 1);
+    }
+  }
+  return {last, counts};
+}
+
+/**
+ * バラエティ🌈の一覧（PCのバラエティ🌈のタブ variety_rainbow.variety_rows と同じ）。並べる台と機種名は、その店の
+ * 最新の記録の日のバラエティ（その日1〜3台の機種）。数値と🌈は選んだ日 [day] の同じ台番号の記録（無ければ record は null）。
+ * 最終🌈（last、その日以前）と30日の🌈の日数（count）。台番号の順。
+ */
+export function varietyRainbowRows(byDay, store, day) {
+  const latest = storeDays(byDay, store)[0];
+  if (!latest) return [];
+  const lineup = byDay.get(`${store}|${latest}`) ?? [];
+  const counts = new Map();
+  for (const r of lineup) counts.set(r.machine, (counts.get(r.machine) ?? 0) + 1);
+  const onDay = new Map((byDay.get(`${store}|${day}`) ?? []).map(r => [r.rack, r]));
+  const {last, counts: rainbowCounts} = rainbowHistory(byDay, store, day);
+  return lineup.filter(r => counts.get(r.machine) <= VARIETY_MAX_RACKS)
+    .map(current => {
+      const record = onDay.get(current.rack) ?? null;
+      return {rack: current.rack, machine: current.machine, record,
+        dayMachine: record && record.machine !== current.machine ? record.machine : null,
+        last: last.get(current.rack) ?? null, count: rainbowCounts.get(current.rack) ?? 0};
+    })
+    .sort((a, b) => a.rack - b.rack);
+}
+
+/** 並べ方（PCと同じ）。 */
+export const VARIETY_SORTS = {
+  '台番順': (a, b) => a.rack - b.rack,
+  '最終🌈の古い順': (a, b) => Number(!!a.record?.rainbow) - Number(!!b.record?.rainbow)
+    || (a.last ?? '').localeCompare(b.last ?? '') || a.rack - b.rack,
+  '機種順': (a, b) => a.machine.localeCompare(b.machine, 'ja') || a.rack - b.rack,
+};
