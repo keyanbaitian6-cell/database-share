@@ -12,8 +12,8 @@ import {
   RAINBOW, lastRainbowDay, lastRainbowText, rackMark, storeHasRainbow,
   RAINBOW_COUNT_DAYS, applyRainbowMarks, markTime, mergeMarks, varietyRainbowRows,
   ROTATION_DAYS, byLongestGap, daysSinceRainbow, rackDays, rainbowVarietyMax, windowDays,
-  SUFFIX_PERIODS, SUFFIX_STORES, ZOROME_ENDINGS, suffixLabel, suffixReport,
-} from './data.mjs?v=e9afb3afe1e6';
+  SUFFIX_PERIODS, hasSuffixSummary, suffixesOf, zoromeEndingsOf, suffixLabel, suffixReport,
+} from './data.mjs?v=ed14c575cd38';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -145,7 +145,7 @@ function render() {
     <div class="tools">
       <button type="button" class="pill pill-outline" data-idle-open>バラエティの回っていない台</button>
       ${Object.hasOwn(MERUHEN_STORES, state.store) ? `<button type="button" class="pill pill-outline" data-variety-open>バラエティ${RAINBOW}</button>` : ''}
-      ${SUFFIX_STORES.includes(state.store) ? '<button type="button" class="pill pill-outline" data-suffix-open>末尾別データまとめ</button>' : ''}
+      ${hasSuffixSummary(state.store) ? '<button type="button" class="pill pill-outline" data-suffix-open>末尾別データまとめ</button>' : ''}
     </div>
     <div class="months">
       <button type="button" class="pill pill-outline" data-month="-1" aria-label="前の月">‹ 前の月</button>
@@ -675,10 +675,12 @@ function openSuffix() {
     const recent = storeDays(state.model.byDay, state.store).filter(d => d <= view.day).slice(0, 7);
     const daily = recent.map(d => ({d, r: suffixReport(state.model.byDay, state.store, d, 1)}));
     const periodLabel = SUFFIX_PERIODS[view.period][0];
-    const endings = ZOROME_ENDINGS.map(n => String(n).padStart(2, '0')).join('・');
+    const endings = zoromeEndingsOf(state.store).map(n => String(n).padStart(2, '0')).join('・');
+    const pscube = /^pscube:/.test(state.store);
+    const netName = pscube ? '差枚（サイトの差枚）' : '推定差枚。ジャグラーオンラインの差枚があればそれ';
     const title = view.period === 'day' ? `${dateLabel(view.day)}の末尾順位` : `${periodLabel}（${shortDate(report.start)}〜${shortDate(view.day)}）の末尾順位`;
     return `<h2 id="sheet-title" class="sr-only">末尾別データまとめ</h2>
-      <p class="caption">${esc(storeLabel(state.store))}・末尾0〜9とゾロ目（下2桁が${endings}。末尾の集計にも入る）。順位は平均差枚（推定差枚。ジャグラーオンラインの差枚があればそれ）の高い順です。</p>
+      <p class="caption">${esc(storeLabel(state.store))}・末尾${suffixesOf(state.store).join('・')}とゾロ目（下2桁が${endings}。末尾の集計にも入る）。順位は平均差枚（${netName}）の高い順です。</p>
       <label class="caption">比較期間 <select data-suffix-period>${Object.entries(SUFFIX_PERIODS).map(([k, [label]]) => `<option value="${k}"${k === view.period ? ' selected' : ''}>${label}</option>`).join('')}</select></label>
       ${ranking(report, title)}
       <details class="more"><summary>すべての末尾・ゾロ目を見る</summary>${tapList(report.summaries.map(s => suffixRow(report, s)))}</details>

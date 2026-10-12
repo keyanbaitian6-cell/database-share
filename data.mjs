@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=e9afb3afe1e6';
+import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=ed14c575cd38';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -452,8 +452,17 @@ export const SUFFIX_STORES = ['saiwaichou'];
 export const SUFFIXES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 export const ZOROME = 100;
 export const ZOROME_ENDINGS = [0, 11, 22, 33, 44, 55, 66, 77, 88, 99];
+// P’s CUBE（このページでは P-STATION）の末尾・ゾロ目（2026-10-12 利用者「共有のP-stationの方にも末尾データほしいです」。
+// 閲覧ページ・Android版の pscubeSuffixes・pscubeZoromeEndings と同じ。台番号に4・9が無い）。
+export const PSCUBE_SUFFIXES = [0, 1, 2, 3, 5, 6, 7, 8];
+export const PSCUBE_ZOROME_ENDINGS = [0, 11, 22, 33, 55, 66, 77, 88];
 export const SUFFIX_PERIODS = {day: ['選択日', 1], week: ['過去7日', 7], month: ['過去30日', 30]};
-export const isZorome = (rack) => rack >= 10 && ZOROME_ENDINGS.includes(rack % 100);
+const isPscube = (store) => /^pscube:/.test(store ?? '');
+/** 末尾別データまとめを出す店（幸町と、P’s CUBEの店すべて）。 */
+export const hasSuffixSummary = (store) => SUFFIX_STORES.includes(store) || isPscube(store);
+export const suffixesOf = (store) => (isPscube(store) ? PSCUBE_SUFFIXES : SUFFIXES);
+export const zoromeEndingsOf = (store) => (isPscube(store) ? PSCUBE_ZOROME_ENDINGS : ZOROME_ENDINGS);
+export const isZorome = (rack, store = 'saiwaichou') => rack >= 10 && zoromeEndingsOf(store).includes(rack % 100);
 export const suffixLabel = (suffix) => (suffix === ZOROME ? 'ゾロ目' : `末尾${suffix}`);
 
 function summarizeSuffix(suffix, entries) {
@@ -472,17 +481,18 @@ function summarizeSuffix(suffix, entries) {
 /** [store] の [day] までの [days] 日（カレンダーの日）の末尾別のまとめ。順位は平均差枚（表示と同じ整数）の高い順、同じなら同順位。 */
 export function suffixReport(byDay, store, day, days = 1) {
   const start = new Date(Date.parse(`${day}T00:00:00Z`) - (days - 1) * 86400000).toISOString().slice(0, 10);
-  const grouped = new Map(SUFFIXES.map(s => [s, []]));
+  const suffixes = suffixesOf(store);
+  const grouped = new Map(suffixes.map(s => [s, []]));
   const zorome = [];
   for (const d of storeDays(byDay, store)) {
     if (d > day || d < start) continue;
     for (const r of byDay.get(`${store}|${d}`) ?? []) {
-      grouped.get(r.rack % 10).push(r);
-      if (isZorome(r.rack)) zorome.push(r);
+      grouped.get(r.rack % 10)?.push(r);   // P’s CUBEの末尾4・9（ほぼ無い）は数えない
+      if (isZorome(r.rack, store)) zorome.push(r);
     }
   }
   const order = (a, b) => b.day.localeCompare(a.day) || a.rack - b.rack;
-  const summaries = [...SUFFIXES.map(s => summarizeSuffix(s, grouped.get(s).sort(order))), summarizeSuffix(ZOROME, zorome.sort(order))];
+  const summaries = [...suffixes.map(s => summarizeSuffix(s, grouped.get(s).sort(order))), summarizeSuffix(ZOROME, zorome.sort(order))];
   const shown = s => Math.round(s.averageNet);
   const ranked = summaries.filter(s => s.averageNet != null).sort((a, b) => shown(b) - shown(a) || a.suffix - b.suffix);
   const rankOf = s => 1 + ranked.filter(x => shown(x) > shown(s)).length;
