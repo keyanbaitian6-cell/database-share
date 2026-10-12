@@ -2,6 +2,16 @@
 // PC core.meruhen_net_estimate と同じ規則をそのまま移したもの（閲覧専用の共有ページ用、2026-10-09）。
 // 規則を変えるときは3つを一緒に変え、database_android/tool/test_share_viewer.mjs の例も合わせる。
 
+// 推定差枚を出さない店・日（ジャグラーオンラインの差枚は出す）。長町南の10/7は、サイトのグラフが全台「始点と終点を
+// 結んだ直線」で途中の推移が無く、推定が正しく決められないため（2026-10-12 利用者「長町南10/7だけ消す」）。
+// PC core.MERUHEN_NET_HIDDEN_DAYS・database_android/lib/meruhen_net.dart の meruhenNetHiddenDays と同じ。
+export const NET_HIDDEN_DAYS = {nagamachiminami: ['2026-10-07']};
+
+/** その店・日の推定差枚を出さないか。 */
+export function meruhenNetHidden(store, day) {
+  return (NET_HIDDEN_DAYS[store] ?? []).includes(day);
+}
+
 export const AXIS_STEPS = [1000, 2000, 4000, 6000, 8000, 10000, 12000, 14000, 16000, 18000, 20000,
   22000, 24000, 26000, 28000, 30000, 32000, 34000, 36000, 38000, 40000];
 const PLAUSIBLE_USE_PER_GAME = 1.75;

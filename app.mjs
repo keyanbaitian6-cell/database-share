@@ -12,7 +12,7 @@ import {
   RAINBOW, lastRainbowDay, lastRainbowText, rackMark, storeHasRainbow,
   RAINBOW_COUNT_DAYS, applyRainbowMarks, markTime, mergeMarks, varietyRainbowRows,
   ROTATION_DAYS, byLongestGap, daysSinceRainbow, rackDays, rainbowVarietyMax, windowDays,
-} from './data.mjs?v=9b308f9f8ddb';
+} from './data.mjs?v=5f2e9ec2a4f7';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';

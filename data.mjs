@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail} from './net.mjs?v=9b308f9f8ddb';
+import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=5f2e9ec2a4f7';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -65,7 +65,8 @@ export function meruhenRecords(doc) {
       r.needsCheck = false;
       r.estimated = false;
     } else {
-      const net = meruhenNetDetail(raw.graph_measurement, r.output, r.games);
+      const net = meruhenNetHidden(r.store, r.day) ? {value: null, needsCheck: false}
+        : meruhenNetDetail(raw.graph_measurement, r.output, r.games);
       r.net = net.value;
       r.needsCheck = net.needsCheck;
       r.estimated = true;
