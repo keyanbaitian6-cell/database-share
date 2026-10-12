@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=5f2e9ec2a4f7';
+import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=e9afb3afe1e6';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -442,3 +442,56 @@ export const VARIETY_SORTS = {
     || (a.last ?? '').localeCompare(b.last ?? '') || a.rack - b.rack,
   '機種順': (a, b) => a.machine.localeCompare(b.machine, 'ja') || a.rack - b.rack,
 };
+
+/*
+ * 末尾別データまとめ（2026-10-12 利用者「幸町にもつくってもらうだけでいい」。閲覧ページ・Android版の
+ * database_android/lib/pscube_suffix.dart と同じ店・末尾・ゾロ目）。このページは採点を持たないので、順位は平均差枚の高い順
+ * （閲覧ページ・Android版は平均点の順）。差枚の分からない台は平均に入れない。
+ */
+export const SUFFIX_STORES = ['saiwaichou'];
+export const SUFFIXES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+export const ZOROME = 100;
+export const ZOROME_ENDINGS = [0, 11, 22, 33, 44, 55, 66, 77, 88, 99];
+export const SUFFIX_PERIODS = {day: ['選択日', 1], week: ['過去7日', 7], month: ['過去30日', 30]};
+export const isZorome = (rack) => rack >= 10 && ZOROME_ENDINGS.includes(rack % 100);
+export const suffixLabel = (suffix) => (suffix === ZOROME ? 'ゾロ目' : `末尾${suffix}`);
+
+function summarizeSuffix(suffix, entries) {
+  const nets = entries.map(r => r.net).filter(v => Number.isFinite(v));
+  return {
+    suffix, label: suffixLabel(suffix), entries,
+    records: entries.length,
+    racks: new Set(entries.map(r => r.rack)).size,
+    averageGames: entries.length ? entries.reduce((n, r) => n + r.games, 0) / entries.length : null,
+    nets: nets.length,
+    averageNet: nets.length ? nets.reduce((a, b) => a + b, 0) / nets.length : null,
+    plus: nets.filter(v => v > 0).length,
+  };
+}
+
+/** [store] の [day] までの [days] 日（カレンダーの日）の末尾別のまとめ。順位は平均差枚（表示と同じ整数）の高い順、同じなら同順位。 */
+export function suffixReport(byDay, store, day, days = 1) {
+  const start = new Date(Date.parse(`${day}T00:00:00Z`) - (days - 1) * 86400000).toISOString().slice(0, 10);
+  const grouped = new Map(SUFFIXES.map(s => [s, []]));
+  const zorome = [];
+  for (const d of storeDays(byDay, store)) {
+    if (d > day || d < start) continue;
+    for (const r of byDay.get(`${store}|${d}`) ?? []) {
+      grouped.get(r.rack % 10).push(r);
+      if (isZorome(r.rack)) zorome.push(r);
+    }
+  }
+  const order = (a, b) => b.day.localeCompare(a.day) || a.rack - b.rack;
+  const summaries = [...SUFFIXES.map(s => summarizeSuffix(s, grouped.get(s).sort(order))), summarizeSuffix(ZOROME, zorome.sort(order))];
+  const shown = s => Math.round(s.averageNet);
+  const ranked = summaries.filter(s => s.averageNet != null).sort((a, b) => shown(b) - shown(a) || a.suffix - b.suffix);
+  const rankOf = s => 1 + ranked.filter(x => shown(x) > shown(s)).length;
+  const plain = summaries.filter(s => s.suffix !== ZOROME);
+  return {
+    summaries, ranked, rankOf, start, end: day,
+    leaders: ranked.filter(s => rankOf(s) === 1),
+    records: plain.reduce((n, s) => n + s.records, 0),
+    racks: plain.reduce((n, s) => n + s.racks, 0),
+    days: new Set(summaries.flatMap(s => s.entries.map(r => r.day))).size,
+  };
+}

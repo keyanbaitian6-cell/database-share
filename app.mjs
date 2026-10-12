@@ -12,7 +12,8 @@ import {
   RAINBOW, lastRainbowDay, lastRainbowText, rackMark, storeHasRainbow,
   RAINBOW_COUNT_DAYS, applyRainbowMarks, markTime, mergeMarks, varietyRainbowRows,
   ROTATION_DAYS, byLongestGap, daysSinceRainbow, rackDays, rainbowVarietyMax, windowDays,
-} from './data.mjs?v=5f2e9ec2a4f7';
+  SUFFIX_PERIODS, SUFFIX_STORES, ZOROME_ENDINGS, suffixLabel, suffixReport,
+} from './data.mjs?v=e9afb3afe1e6';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -144,6 +145,7 @@ function render() {
     <div class="tools">
       <button type="button" class="pill pill-outline" data-idle-open>バラエティの回っていない台</button>
       ${Object.hasOwn(MERUHEN_STORES, state.store) ? `<button type="button" class="pill pill-outline" data-variety-open>バラエティ${RAINBOW}</button>` : ''}
+      ${SUFFIX_STORES.includes(state.store) ? '<button type="button" class="pill pill-outline" data-suffix-open>末尾別データまとめ</button>' : ''}
     </div>
     <div class="months">
       <button type="button" class="pill pill-outline" data-month="-1" aria-label="前の月">‹ 前の月</button>
@@ -245,6 +247,8 @@ function titleOfView(view) {
   if (view.kind === 'machine') return displayMachineName(view.machine);
   if (view.kind === 'idle') return 'バラエティの回っていない台';
   if (view.kind === 'variety') return `バラエティ${RAINBOW}一覧`;
+  if (view.kind === 'suffix') return '末尾別データまとめ';
+  if (view.kind === 'suffixList') return `${suffixLabel(view.suffix)}の内訳`;
   return 'その日のまとめ';
 }
 
@@ -641,6 +645,80 @@ function openVariety() {
   });
 }
 
+/*
+ * 末尾別データまとめ（2026-10-12 利用者「幸町にもつくってもらうだけでいい」。閲覧ページ・Android版と同じ末尾・ゾロ目）。
+ * 上の帯の日付が「選んだ日」。比較期間（選択日・過去7日・過去30日）、末尾の順位（このページは採点が無いので平均差枚の順）、
+ * すべての末尾、日別の首位（直近7記録日）。末尾を押すとその末尾の台（日ごと）→ 台を押すとその台のデータ。
+ */
+function openSuffix() {
+  const days = storeDays(state.model.byDay, state.store);
+  if (!days.length) return;
+  const net = (v) => (v == null ? '—' : signed(Math.round(v)));
+  const average = (v) => (v == null ? '—' : v.toFixed(1));
+  const reportOf = (view) => suffixReport(state.model.byDay, state.store, view.day, SUFFIX_PERIODS[view.period][1]);
+  const suffixRow = (report, s) => ({
+    lead: s.averageNet == null ? '' : `${report.rankOf(s)}位`,
+    attrs: `data-suffix="${s.suffix}"`,
+    main: `<span class="rack">${esc(s.label)}</span><span class="machine" style="display:block">平均G ${average(s.averageGames)}・${s.racks}台・${s.records}件</span>`,
+    right: `<span class="value num ${s.averageNet == null ? 'zero' : tone(s.averageNet)}" style="display:block">${net(s.averageNet)}</span>`
+      + `<span class="small num">差枚あり${s.nets}件・プラス${s.nets ? Math.round(s.plus / s.nets * 100) : 0}%</span>`,
+  });
+  const ranking = (report, title) => {
+    const top = report.ranked.filter(s => report.rankOf(s) <= 3);
+    const body = top.length
+      ? `<p class="caption">平均差枚の首位：${report.leaders.map(s => esc(s.label)).join('・')}${report.leaders.length > 1 ? '（同じ）' : ''}</p>${tapList(top.map(s => suffixRow(report, s)))}`
+      : `<p class="note">${report.records ? '差枚の分かった台がありません。' : '対象の記録がありません。'}</p>`;
+    return `<h3 class="sheet-sub">${esc(title)}</h3>${body}`;
+  };
+  const suffixView = (view) => {
+    const report = reportOf(view);
+    const recent = storeDays(state.model.byDay, state.store).filter(d => d <= view.day).slice(0, 7);
+    const daily = recent.map(d => ({d, r: suffixReport(state.model.byDay, state.store, d, 1)}));
+    const periodLabel = SUFFIX_PERIODS[view.period][0];
+    const endings = ZOROME_ENDINGS.map(n => String(n).padStart(2, '0')).join('・');
+    const title = view.period === 'day' ? `${dateLabel(view.day)}の末尾順位` : `${periodLabel}（${shortDate(report.start)}〜${shortDate(view.day)}）の末尾順位`;
+    return `<h2 id="sheet-title" class="sr-only">末尾別データまとめ</h2>
+      <p class="caption">${esc(storeLabel(state.store))}・末尾0〜9とゾロ目（下2桁が${endings}。末尾の集計にも入る）。順位は平均差枚（推定差枚。ジャグラーオンラインの差枚があればそれ）の高い順です。</p>
+      <label class="caption">比較期間 <select data-suffix-period>${Object.entries(SUFFIX_PERIODS).map(([k, [label]]) => `<option value="${k}"${k === view.period ? ' selected' : ''}>${label}</option>`).join('')}</select></label>
+      ${ranking(report, title)}
+      <details class="more"><summary>すべての末尾・ゾロ目を見る</summary>${tapList(report.summaries.map(s => suffixRow(report, s)))}</details>
+      <h3 class="sheet-sub">日別の首位（直近${daily.length}記録日）</h3>
+      <p class="caption">日付を押すと、その日の末尾順位へ。</p>
+      ${tapList(daily.map(({d, r}) => ({
+        lead: '', attrs: `data-suffix-day="${d}"`, current: d === view.day,
+        main: `<span class="rack">${esc(shortDateWeek(d))}</span>`,
+        right: `<span class="value num" style="display:block">${r.leaders.length ? r.leaders.map(s => esc(s.label)).join('・') : '—'}</span>`
+          + `<span class="small num">${r.leaders.length ? `平均 ${net(r.leaders[0].averageNet)}` : '差枚なし'}</span>`,
+      })))}
+      <p class="note">${shortDate(report.start)}〜${shortDate(view.day)}：記録${report.days}日・${report.racks}台・${report.records}件（台×日）。平均差枚は差枚の分かった台だけ。プラス＝差枚がプラスの台の割合。閲覧ページ・Android版の同じ画面は採点の平均点で順位を付けます。</p>`;
+  };
+  const listView = (view) => {
+    const s = reportOf(view).summaries.find(x => x.suffix === view.suffix);
+    view.entries = s.entries;
+    if (!s.entries.length) return `<h2 id="sheet-title" class="sr-only">${esc(s.label)}の内訳</h2><p class="note">この期間に${esc(s.label)}の台はありません。</p>`;
+    const listDays = [...new Set(s.entries.map(r => r.day))];
+    return `<h2 id="sheet-title" class="sr-only">${esc(s.label)}の内訳</h2>
+      <p class="caption">${esc(storeLabel(state.store))}・${s.racks}台・${listDays.length}日・${s.records}件。平均差枚 ${net(s.averageNet)}・平均G ${average(s.averageGames)}。台を押すとその台のデータ。</p>
+      ${listDays.map(d => `<h3 class="sheet-sub">${esc(dateLabel(d))}</h3>${tapList(s.entries.map((r, i) => [r, i]).filter(([r]) => r.day === d).map(([r, i]) => ({
+        lead: '', attrs: `data-suffix-rack="${i}"`,
+        main: `<span class="rack num">${r.rack}番${rackMark(r)}</span><span class="machine" style="display:block">${esc(displayMachineName(r.machine))}</span>`,
+        right: `${netCell(r)}<span class="small num">${count(r.games)}G</span>`,
+      })))}`).join('')}`;
+  };
+  openSheet({
+    first: {kind: 'suffix', day: days[0], period: 'day'},
+    body: (view) => (view.kind === 'suffix' ? suffixView(view) : view.kind === 'suffixList' ? listView(view) : rackView(view)),
+    onRow: (row, push, view) => {
+      if (row.dataset.suffix != null) push({kind: 'suffixList', day: view.day, period: view.period, suffix: Number(row.dataset.suffix)});
+      else if (row.dataset.suffixDay) push({kind: 'suffix', day: row.dataset.suffixDay, period: 'day'});
+      else if (row.dataset.suffixRack != null) push({kind: 'rack', rack: view.entries[Number(row.dataset.suffixRack)]});
+    },
+    onChange: (select, view) => {
+      if (select.matches('[data-suffix-period]')) view.period = select.value;
+    },
+  });
+}
+
 function showSetup(message) {
   state.model = null;
   reload.hidden = true;
@@ -676,11 +754,12 @@ function connect(id) {
 }
 
 app.addEventListener('click', (e) => {
-  const target = e.target.closest('[data-open], [data-store], [data-month], [data-idle-open], [data-variety-open]');
+  const target = e.target.closest('[data-open], [data-store], [data-month], [data-idle-open], [data-variety-open], [data-suffix-open]');
   if (!target || !state.model) return;
   if (target.dataset.open) { openDay(target.dataset.open); return; }
   if (target.dataset.idleOpen != null) { openIdle(); return; }
   if (target.dataset.varietyOpen != null) { openVariety(); return; }
+  if (target.dataset.suffixOpen != null) { openSuffix(); return; }
   if (target.dataset.store) {
     state.store = target.dataset.store;
     store.set(STORE_KEY, state.store);
