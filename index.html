@@ -202,8 +202,25 @@
   .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .segmented { display: flex; gap: 8px; margin: 14px 0 10px; }
   .segmented .pill { flex: 1; font-size: 14px; min-height: 36px; }
-  .week-group { margin-top: 24px; }
-  .week-group h3, .week-period { font-size: 17px; margin: 12px 0; }
+  .sheet .candidate-heading { font-size: 22px; margin: 20px 0 4px; }
+  .candidate-period { color: var(--color-slate); font-size: 15px; margin: 0 0 10px; }
+  .candidate-count { font-size: 18px; margin: 18px 0 10px; }
+  .candidate-list { list-style: none; padding: 0; margin: 0; }
+  .candidate-list li { margin: 0 0 10px; }
+  .candidate-card { display: flex; align-items: center; width: 100%; text-align: left; padding: 14px; gap: 12px;
+    background: #fff; border: 1px solid var(--color-control-gray); border-radius: 8px; color: var(--color-ink); font: inherit; cursor: pointer; }
+  .candidate-card .main { flex: 1; min-width: 0; }
+  .candidate-title { display: block; font-size: 18px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+  .candidate-title .rack { margin-right: 10px; white-space: nowrap; }
+  .candidate-status { display: block; margin-top: 6px; font-size: 14px; color: var(--color-slate); }
+  .candidate-status.high { color: var(--color-apple-blue); font-weight: 600; }
+  .candidate-detail { display: block; margin-top: 5px; font-size: 12px; line-height: 1.5; color: var(--color-slate); }
+  .candidate-card .chev { color: var(--color-steel); font-size: 22px; flex: none; }
+  .candidate-card:focus-visible { outline: 2px solid var(--color-pricing-blue); outline-offset: 2px; }
+  .week-marked { margin-top: 20px; }
+  .week-marked summary { font-size: 15px; padding: 10px 0; cursor: pointer; }
+  .variety-sort { display: flex; gap: 8px; align-items: center; font-size: 14px; margin-bottom: 12px; }
+  .variety-sort select { flex: 1; min-width: 0; padding: 8px; }
   .rotation { display: grid; gap: 3px; margin-top: 4px; }
   .rotation .r { display: grid; grid-template-columns: 76px repeat(7, minmax(0, 1fr)) 40px; gap: 3px; align-items: stretch; }
   .rotation .head span { font-size: 12px; color: var(--color-slate); text-align: center; padding: 4px 0; }
@@ -282,6 +299,6 @@
   <p>差枚＝その日の総差枚（差枚がわかった台の合計）。メルヘンはグラフと最大持玉からの推定差枚で、確定値ではありません（※は要確認）。P-STATIONは元グラフの差枚です。</p>
   <p>＊＝前日までに入力した記録がないイベント（当日以降の入力・時刻不明）。強かった機種＝1台あたりの平均回転数（2台以上ある機種）。</p>
 </footer>
-<script type="module" src="./app.mjs?v=65145d5da2f9"></script>
+<script type="module" src="./app.mjs?v=6285c2409150"></script>
 </body>
 </html>
