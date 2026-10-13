@@ -13,7 +13,8 @@ import {
   RAINBOW_COUNT_DAYS, applyRainbowMarks, markTime, mergeMarks, varietyRainbowRows,
   ROTATION_DAYS, byLongestGap, daysSinceRainbow, rackDays, rainbowVarietyMax, windowDays,
   SUFFIX_PERIODS, hasSuffixSummary, suffixesOf, zoromeEndingsOf, suffixLabel, suffixReport,
-} from './data.mjs?v=ed14c575cd38';
+  varietyWeek,
+} from './data.mjs?v=65145d5da2f9';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -572,7 +573,7 @@ async function toggleRainbow(key) {
 }
 
 // 見せ方（2026-10-12 利用者「AとBを切り替え」）：grid＝ローテーション表、gap＝空き順。
-const VARIETY_MODES = {grid: '表', gap: '空き順'};
+const VARIETY_MODES = {grid: '表', gap: '空き順', week: '過去7日'};
 
 /**
  * バラエティ🌈（2026-10-11 利用者「共有の方にも店舗別のバラエティ一覧つけて同じようにしたい」、2026-10-12「何かこうしてみると
@@ -586,7 +587,8 @@ function openVariety() {
   const days = storeDays(state.model.byDay, state.store);
   if (!days.length) return;
   const savedMode = store.get(VARIETY_MODE_KEY);
-  const first = {kind: 'variety', day: days[0], mode: Object.hasOwn(VARIETY_MODES, savedMode) ? savedMode : 'grid'};
+  const modes = state.store === 'saiwaichou' ? VARIETY_MODES : {grid: '表', gap: '空き順'};
+  const first = {kind: 'variety', day: days[0], mode: Object.hasOwn(modes, savedMode) ? savedMode : state.store === 'saiwaichou' ? 'week' : 'grid'};
   const gapText = (x, day) => {
     const n = daysSinceRainbow(x.last, day);
     return n == null ? 'なし' : n === 0 ? '当日' : `${n}日`;
@@ -597,7 +599,7 @@ function openVariety() {
     // 見出しは上に固定した帯（バラエティ🌈一覧）だけにする（大きな見出しを重ねると見づらいため。2026-10-12）。
     return `
       <h2 id="sheet-title" class="sr-only">バラエティ${RAINBOW}一覧</h2>
-      <div class="segmented" role="group" aria-label="見せ方">${Object.entries(VARIETY_MODES).map(([key, label]) =>
+      <div class="segmented" role="group" aria-label="見せ方">${Object.entries(modes).map(([key, label]) =>
         `<button type="button" class="pill ${view.mode === key ? 'pill-blue' : 'pill-outline'}" data-variety-mode="${key}" aria-pressed="${view.mode === key}">${label}</button>`).join('')}</div>
       <p class="caption">${esc(storeLabel(state.store))}・記録のそろった最新の日に${kinds}の台（入れ替えは自動で変わります）。${rows.length}台・${dateLabel(view.day)}の${RAINBOW} ${marked}台。</p>`;
   };
@@ -623,16 +625,43 @@ function openVariety() {
           <span class="right"><span class="value num big-gap" style="display:block">${gapText(x, view.day)}</span><span class="small num">最後の${RAINBOW}${x.last ? ` ${shortDate(x.last)}` : ''}</span></span>
           ${r ? '<span class="chev" aria-hidden="true">›</span></button>' : '</div>'}${r ? rainbowButton(r) : ''}</li>`;
       }).join('')}</ol>`;
+  const weekView = (view, rows) => {
+    const report = varietyWeek(state.model.byDay, state.store, view.day);
+    view.weekRows = report.rows;
+    const group = (title, list, high, id) => `<section class="week-group" data-week-group="${id}">
+      <h3>${title}（${list.length}台）</h3>${list.length ? `<ol class="list">${list.map(x => {
+        const details = [
+          ...(high ? [`最高：${shortDate(x.high[0].record.day)} ${x.high[0].score.provisional ? '暫定' : '参考'} ${x.high[0].score.total.toFixed(1)}点${rackMark(x.high[0].record)}`, `70点以上 ${x.high.length}日`] : []),
+          `記録${x.observedDays}/7日・期間内の${RAINBOW} ${x.rainbowDays}日`,
+          ...(x.observedDays < 7 ? ['未取得の日は判定できません'] : []),
+          ...(x.records.some(r => r.machine !== x.machine) ? ['入れ替え前の機種を含む台番号の履歴'] : []),
+        ];
+        return `<li><button type="button" class="row" data-week-rack="${report.rows.indexOf(x)}">
+          <span class="main"><span class="rack num">${x.rack}番</span><span class="machine" style="display:block">${esc(displayMachineName(x.machine))}</span>
+          <span class="small" style="display:block">${details.map(esc).join('<br>')}</span></span><span class="chev" aria-hidden="true">›</span>
+          </button></li>`;
+      }).join('')}</ol>` : '<p class="note">該当する台はありません</p>'}</section>`;
+    return `<h3 class="week-period">${report.days[0]}〜${report.days.at(-1)}</h3>
+      <p class="caption">選んだ日の前日まで7日間。70点以上と${RAINBOW}なしは別々に表示し、両方に当てはまる台は両方に出ます。${RAINBOW}なしは取得済みの記録で判定します。採点は閲覧ページと同じ実績点（暫定を含む）です。</p>
+      ${group('70点以上になった台', report.high, true, 'high')}
+      ${group(`${RAINBOW}がない台`, report.noRainbow, false, 'none')}
+      ${report.unknown.length ? `<p class="note">期間内の記録なし：${report.unknown.length}台（${RAINBOW}の有無はわかりません）</p>` : ''}`;
+  };
   const varietyView = (view) => {
     const rows = varietyRainbowRows(state.model.byDay, state.store, view.day);
     view.rows = rows;
     if (!rows.length) return `${header(view, rows)}<p class="note">この店はバラエティの台の記録がありません。</p>`;
-    return header(view, rows) + (view.mode === 'gap' ? gapView(view, rows) : gridView(view, rows));
+    return header(view, rows) + (view.mode === 'week' ? weekView(view, rows) : view.mode === 'gap' ? gapView(view, rows) : gridView(view, rows));
   };
   openSheet({
     first,
     body: (view) => (view.kind === 'variety' ? varietyView(view) : rackView(view)),
     onRow: (row, push, view) => {
+      if (row.dataset.weekRack != null) {
+        const r = view.weekRows[Number(row.dataset.weekRack)]?.openRecord;
+        if (r) push({kind: 'rack', rack: r});
+        return;
+      }
       const x = row.dataset.varietyRack != null ? view.rows[Number(row.dataset.varietyRack)] : null;
       if (x?.record) push({kind: 'rack', rack: x.record});
     },

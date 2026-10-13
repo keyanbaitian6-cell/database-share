@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=ed14c575cd38';
+import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=65145d5da2f9';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -58,6 +58,8 @@ export function meruhenRecords(doc) {
       // 確定が出た台の印🌈（PCで付ける。RAINBOW.md）と、付け外しした時刻（iPhone・共有ページの印と比べる）。
       rainbow: raw.rainbow === true,
       rainbowAt: typeof raw.rainbow_at === 'string' ? raw.rainbow_at : null,
+      // 過去7日の70点判定にも、閲覧ページと同じ元の4点・最大持玉を使う。
+      graph: raw.graph_measurement ?? null,
     };
     // ジャグラーオンラインの差枚（お試し、JUGGLER_ONLINE.md）があれば推定差枚より優先する。
     if (Number.isInteger(raw.jo_net)) {
@@ -398,6 +400,85 @@ export const ROTATION_DAYS = 7;
 export function windowDays(day, n = ROTATION_DAYS) {
   const end = Date.parse(`${day}T00:00:00Z`);
   return Array.from({length: n}, (_, i) => new Date(end - (n - 1 - i) * 86400000).toISOString().slice(0, 10));
+}
+
+/** 閲覧ページ lib/scoring.dart scoreRecord のメルヘン採点v12。推定差枚は採点に使わない。 */
+export function meruhenScore(row, history) {
+  if (row.games <= 500 || row.bb < 0 || row.rb < 0 || (row.output ?? 0) < 0 || implausible(row)) {
+    return {total: null, provisional: true};
+  }
+  const first = windowDays(row.day, 31)[0];
+  const target = Math.max(500, row.games);
+  const refs = history.filter(r => r.store === row.store && r.machine === row.machine
+    && r.day >= first && r.day < row.day && r.games >= Math.max(500, target / 2)
+    && r.games <= target * 2 && !implausible(r));
+  const hitRefs = refs.filter(r => r.bb >= 0 && r.rb >= 0);
+  const holdRefs = refs.filter(r => r.output != null && r.output >= 0);
+  const days = list => new Set(list.map(r => r.day)).size;
+  const rank = (value, list, field, maximum) => {
+    if (value == null || !list.length) return null;
+    const values = list.map(field);
+    const percentile = (values.filter(v => v < value).length + 0.5 * values.filter(v => v === value).length) / values.length;
+    const weight = Math.pow(row.games / (row.games + 1500) * list.length / (list.length + 20)
+      * days(list) / (days(list) + 3), 1 / 3);
+    return maximum * (0.5 + weight * (percentile - 0.5));
+  };
+  const rate = r => (r.bb + r.rb) / r.games;
+  const hit = rank(rate(row), hitRefs, rate, 60);
+  const rankedHold = rank(row.output, holdRefs, r => r.output, 20);
+  const hold = rankedHold == null ? null : Math.max(rankedHold, 20 * Math.min(1, row.output / 19000));
+  let positive = null, retention = null;
+  const g = row.graph;
+  if (g == null && row.bb + row.rb === 0) {
+    positive = retention = 0;
+  } else if (g && [g.baseline_y, g.peak_y, g.end_y].every(v => typeof v === 'number' && Number.isFinite(v))) {
+    const peak = Math.max(0, g.baseline_y - g.peak_y), end = g.baseline_y - g.end_y;
+    if (end === 0 || Math.abs(end) > 1) {
+      positive = end > 0 ? 10 : 0;
+      retention = peak === 0 ? 0 : 10 * Math.max(0, Math.min(1, end / peak));
+    }
+  }
+  const parts = [[hit, 60], [hold, 20], [positive, 10], [retention, 10]];
+  const missing = parts.reduce((sum, [value, max]) => sum + (value == null ? max : 0), 0);
+  const observed = parts.reduce((sum, [value]) => sum + (value ?? 0), 0);
+  return {total: Math.round((observed + missing / 2) * 10) / 10,
+    provisional: missing > 0 || row.games < 1500 || Math.min(hitRefs.length, holdRefs.length) < 20
+      || Math.min(days(hitRefs), days(holdRefs)) < 3};
+}
+
+// 採点の比較相手は店舗・機種ごと。印の付け外しでは採点が変わらないため結果も覚える。
+const weeklyScoreCache = new WeakMap();
+function weeklyScorer(byDay) {
+  let cached = weeklyScoreCache.get(byDay);
+  if (!cached) {
+    const histories = new Map(), scores = new WeakMap();
+    for (const rows of byDay.values()) for (const r of rows) {
+      const key = `${r.store}|${r.machine}`;
+      if (!histories.has(key)) histories.set(key, []);
+      histories.get(key).push(r);
+    }
+    cached = r => {
+      if (!scores.has(r)) scores.set(r, meruhenScore(r, histories.get(`${r.store}|${r.machine}`) ?? []));
+      return scores.get(r);
+    };
+    weeklyScoreCache.set(byDay, cached);
+  }
+  return cached;
+}
+
+/** 幸町の最新の並びの1台機種。選択日の前日まで7日、台番号ごと（既存の🌈表と同じ）。 */
+export function varietyWeek(byDay, store, day) {
+  const days = windowDays(day, 8).slice(0, 7), score = weeklyScorer(byDay);
+  const rows = store === 'saiwaichou' ? varietyRainbowRows(byDay, store, day).map(x => {
+    const records = rackDays(byDay, store, x.rack, days).filter(Boolean);
+    const high = records.map(record => ({record, score: score(record)})).filter(x => x.score.total != null && x.score.total >= 70);
+    high.sort((a, b) => b.score.total - a.score.total || b.record.day.localeCompare(a.record.day));
+    return {...x, records, high, rainbowDays: records.filter(r => r.rainbow).length,
+      observedDays: records.length, openRecord: high[0]?.record ?? records.at(-1) ?? x.record};
+  }) : [];
+  return {days, rows, high: rows.filter(x => x.high.length),
+    noRainbow: rows.filter(x => x.observedDays > 0 && x.rainbowDays === 0),
+    unknown: rows.filter(x => x.observedDays === 0)};
 }
 
 /**
