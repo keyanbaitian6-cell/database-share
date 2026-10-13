@@ -14,7 +14,7 @@ import {
   ROTATION_DAYS, byLongestGap, daysSinceRainbow, rackDays, rainbowVarietyMax, windowDays,
   SUFFIX_PERIODS, hasSuffixSummary, suffixesOf, zoromeEndingsOf, suffixLabel, suffixReport,
   varietyWeek, varietyMaxRacksFor, rainbowTodayRows,
-} from './data.mjs?v=44d156f5d953';
+} from './data.mjs?v=7bf569ceac9e';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
