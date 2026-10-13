@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=a5425245dcf5';
+import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=f8a25da5e475';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -385,6 +385,26 @@ export function varietyRainbowRows(byDay, store, day) {
         last: last.get(current.rack) ?? null, count: rainbowCounts.get(current.rack) ?? 0};
     })
     .sort((a, b) => a.rack - b.rack);
+}
+
+/** 本日用の印一覧。未取得の数値行を byDay へ足さず、印だけを別に扱う。 */
+export function rainbowTodayRows(byDay, marks, store, day) {
+  if (store !== 'saiwaichou') return {lineupDay: null, rows: []};
+  const known = new Map([...byDay].filter(([key]) => key.startsWith(`${store}|`) && key.slice(store.length + 1) <= day));
+  const source = lineupDay(known, store);
+  const markMap = new Map(mergeMarks([], marks).map(m => [`${m.store}|${m.day}|${m.rack}`, m]));
+  const rows = varietyRainbowRows(known, store, day).map(x => {
+    const actual = x.record;
+    const marker = {store, day, rack: x.rack, machine: actual?.machine ?? x.machine,
+      rainbow: actual?.rainbow ?? false, rainbowAt: actual?.rainbowAt ?? null};
+    const mark = markMap.get(`${store}|${day}|${x.rack}`);
+    if (mark && (!marker.rainbowAt || isoTime(mark.updated_at) > isoTime(marker.rainbowAt))) {
+      marker.rainbow = mark.on;
+      marker.rainbowAt = mark.updated_at;
+    }
+    return {...x, marker, imported: !!actual};
+  });
+  return {lineupDay: source, rows};
 }
 
 /**

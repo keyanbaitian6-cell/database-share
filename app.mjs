@@ -13,8 +13,8 @@ import {
   RAINBOW_COUNT_DAYS, applyRainbowMarks, markTime, mergeMarks, varietyRainbowRows,
   ROTATION_DAYS, byLongestGap, daysSinceRainbow, rackDays, rainbowVarietyMax, windowDays,
   SUFFIX_PERIODS, hasSuffixSummary, suffixesOf, zoromeEndingsOf, suffixLabel, suffixReport,
-  varietyWeek, varietyMaxRacksFor,
-} from './data.mjs?v=a5425245dcf5';
+  varietyWeek, varietyMaxRacksFor, rainbowTodayRows,
+} from './data.mjs?v=f8a25da5e475';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -87,11 +87,12 @@ async function load() {
   const byDay = indexRecords(records);
   // ほかの端末（閲覧ページ・共有ページ）で付け外しした🌈と、この端末の分（PCが取り込む前でも出す）。
   const sharedMarks = doc(rainbow)?.marks;
-  applyRainbowMarks(byDay, mergeMarks(Array.isArray(sharedMarks) ? sharedMarks : [], localMarks()));
+  const marks = mergeMarks(Array.isArray(sharedMarks) ? sharedMarks : [], localMarks());
+  applyRainbowMarks(byDay, marks);
   const stores = [...Object.keys(MERUHEN_STORES), ...new Set(records.map(r => r.store).filter(s => s.startsWith('pscube:')))]
     .filter(s => records.some(r => r.store === s));
   state.model = {
-    byDay, stores,
+    byDay, stores, marks,
     events: mergeEvents(m?.date_events, doc(events)?.events, p?.date_events, doc(pscubeEvents)?.events),
     exportedAt: [m?.exported_at, p?.exported_at].filter(Boolean).sort().pop() ?? null,
   };
@@ -219,6 +220,7 @@ function rackView({rack: r}) {
 
 /** 画面の選べる日（新しい順）。台のデータは同じ店・機種・台番号の記録がある日、機種の台一覧はその機種がある日。 */
 function daysOfView(view) {
+  if (view.kind === 'variety' && view.mode === 'today') return [view.todayDay];
   const byDay = state.model.byDay;
   const has = (store, d, test) => (byDay.get(`${store}|${d}`) ?? []).some(test);
   if (view.kind === 'rack') {
@@ -230,7 +232,7 @@ function daysOfView(view) {
   return all;
 }
 
-const dayOfView = (view) => (view.kind === 'rack' ? view.rack.day : view.day);
+const dayOfView = (view) => (view.kind === 'rack' ? view.rack.day : view.kind === 'variety' && view.mode === 'today' ? view.todayDay : view.day);
 
 /** 画面の日を変える。台のデータは、その日の同じ店・機種・台番号の記録に切り替える。 */
 function setViewDay(view, day) {
@@ -248,6 +250,7 @@ function titleOfView(view) {
   if (view.kind === 'rack') return `${view.rack.rack}番台${view.rack.rainbow ? ` ${RAINBOW}` : ''}`;
   if (view.kind === 'machine') return displayMachineName(view.machine);
   if (view.kind === 'idle') return 'バラエティの回っていない台';
+  if (view.kind === 'variety' && view.mode === 'today') return 'バラエティ🌈 本日';
   if (view.kind === 'variety') return view.mode === 'week' ? 'バラエティの候補' : `バラエティ${RAINBOW}一覧`;
   if (view.kind === 'suffix') return '末尾別データまとめ';
   if (view.kind === 'suffixList') return `${suffixLabel(view.suffix)}の内訳`;
@@ -331,6 +334,12 @@ function openSheet({first, body, onRow, onChange, onAction}) {
     // 🌈のボタン（台のデータ・バラエティ🌈）：付け外しして、すぐ描き直す（送るのは後ろで。送っている間も押せる）。
     const mark = e.target.closest('[data-rainbow]');
     if (mark) {
+      if (view.kind === 'variety' && view.mode === 'today' && view.todayDay !== todayJst().day) {
+        view.todayDay = todayJst().day;
+        toast('日付が変わりました。本日の一覧を確認してから押してください。');
+        render();
+        return;
+      }
       view.scroll = sheet.scrollTop;
       toggleRainbow(mark.dataset.rainbow);
       render();
@@ -552,14 +561,23 @@ function toast(text) {
 async function toggleRainbow(key) {
   const [s, day, rackText] = key.split('|');
   const rack = Number(rackText);
-  const r = (state.model?.byDay.get(`${s}|${day}`) ?? []).find(x => x.rack === rack);
+  const actual = (state.model?.byDay.get(`${s}|${day}`) ?? []).find(x => x.rack === rack);
+  const pending = day === todayJst().day && s === state.store
+    ? rainbowTodayRows(state.model.byDay, state.model.marks, s, day).rows.find(x => x.rack === rack)?.marker : null;
+  const r = actual ?? pending;
   if (!r) return;
   const old = localMarks().find(m => m.store === s && m.day === day && m.rack === rack);
   const mark = {store: s, day, rack, on: !r.rainbow, updated_at: markTime(Date.now(), r.rainbowAt, old?.updated_at)};
+  const marks = mergeMarks(localMarks(), [mark]);
+  try {
+    localStorage.setItem(MARKS_KEY, JSON.stringify(marks));
+  } catch {
+    toast('🌈をこの端末に保存できませんでした。空き容量やブラウザの保存設定を確認して、もう一度押してください。');
+    return;
+  }
   r.rainbow = mark.on;
   r.rainbowAt = mark.updated_at;
-  const marks = mergeMarks(localMarks(), [mark]);
-  store.set(MARKS_KEY, JSON.stringify(marks));
+  state.model.marks = mergeMarks(state.model.marks, [mark]);
   const done = mark.on ? `${rack}番台に${RAINBOW}を付けました。` : `${rack}番台の${RAINBOW}を外しました。`;
   try {
     const response = await fetch(`https://script.google.com/macros/s/${state.id}/exec`, {
@@ -574,7 +592,7 @@ async function toggleRainbow(key) {
 }
 
 // 見せ方（2026-10-12 利用者「AとBを切り替え」）：grid＝ローテーション表、gap＝空き順。
-const VARIETY_MODES = {week: '候補', grid: '🌈の記録'};
+const VARIETY_MODES = {week: '候補', grid: '🌈の記録', today: '本日'};
 
 /**
  * バラエティ🌈（2026-10-11 利用者「共有の方にも店舗別のバラエティ一覧つけて同じようにしたい」、2026-10-12「何かこうしてみると
@@ -589,7 +607,7 @@ function openVariety() {
   if (!days.length) return;
   const savedMode = store.get(VARIETY_MODE_KEY);
   const modes = state.store === 'saiwaichou' ? VARIETY_MODES : {grid: '🌈の記録'};
-  const first = {kind: 'variety', day: days[0], mode: Object.hasOwn(modes, savedMode) ? savedMode : state.store === 'saiwaichou' ? 'week' : 'grid', sort: store.get(VARIETY_SORT_KEY) === 'gap' ? 'gap' : 'grid'};
+  const first = {kind: 'variety', day: days[0], todayDay: todayJst().day, mode: Object.hasOwn(modes, savedMode) ? savedMode : state.store === 'saiwaichou' ? 'week' : 'grid', sort: store.get(VARIETY_SORT_KEY) === 'gap' ? 'gap' : 'grid'};
   const gapText = (x, day) => {
     const n = daysSinceRainbow(x.last, day);
     return n == null ? 'なし' : n === 0 ? '当日' : `${n}日`;
@@ -602,7 +620,7 @@ function openVariety() {
       <h2 id="sheet-title" class="sr-only">${view.mode === 'week' ? 'バラエティの候補' : `バラエティ${RAINBOW}一覧`}</h2>
       <div class="segmented" role="group" aria-label="見せ方">${Object.entries(modes).map(([key, label]) =>
         `<button type="button" class="pill ${view.mode === key ? 'pill-blue' : 'pill-outline'}" data-variety-mode="${key}" aria-pressed="${view.mode === key}">${label}</button>`).join('')}</div>
-      ${view.mode === 'week' ? '' : `<p class="caption">${esc(storeLabel(state.store))}・記録のそろった最新の日に${kinds}の台（入れ替えは自動で変わります）。${rows.length}台・${dateLabel(view.day)}の${RAINBOW} ${marked}台。</p>`}`;
+      ${view.mode === 'week' || view.mode === 'today' ? '' : `<p class="caption">${esc(storeLabel(state.store))}・記録のそろった最新の日に${kinds}の台（入れ替えは自動で変わります）。${rows.length}台・${dateLabel(view.day)}の${RAINBOW} ${marked}台。</p>`}`;
   };
   const gridView = (view, rows) => {
     const window = windowDays(view.day);
@@ -657,6 +675,17 @@ function openVariety() {
       ${report.unknown.length ? `<p class="note">記録がない台：${report.unknown.length}台（候補に含めていません）</p>` : ''}`;
   };
   const varietyView = (view) => {
+    if (view.mode === 'today') {
+      const report = rainbowTodayRows(state.model.byDay, state.model.marks, state.store, view.todayDay);
+      return header(view, []) + `<h3>本日 ${esc(view.todayDay)}</h3>
+        <p class="caption">確定を見た台に、その場で🌈を付けられます。データ取り込み後も印は引き継がれます。</p>
+        <p class="note">${report.lineupDay ? `機種一覧：${esc(report.lineupDay)}の取り込み済みデータを参照（幸町・1台機種）` : '参照できる機種一覧がありません。先にデータを読み込んでください。'}</p>
+        <p>本日の🌈 ${report.rows.filter(x => x.marker.rainbow).length}台</p>
+        <ol class="list" data-today-racks>${report.rows.map(x => `<li class="with-mark"><div class="row">
+          <span class="main"><span class="rack num">${x.rack}番${rackMark(x.marker)}</span>
+          <span class="machine" style="display:block">${esc(displayMachineName(x.marker.machine))}</span>
+          <span class="small">本日分 ${x.imported ? '取り込み済み' : '未取得'}</span></span></div>${rainbowButton(x.marker)}</li>`).join('')}</ol>`;
+    }
     const rows = varietyRainbowRows(state.model.byDay, state.store, view.day);
     view.rows = rows;
     if (!rows.length) return `${header(view, rows)}<p class="note">この店はバラエティの台の記録がありません。</p>`;
@@ -677,6 +706,7 @@ function openVariety() {
     onAction: (button, view) => {
       if (button.dataset.varietyMode) {
         view.mode = button.dataset.varietyMode;
+        if (view.mode === 'today') view.todayDay = todayJst().day;
         store.set(VARIETY_MODE_KEY, view.mode);
       }
     },
