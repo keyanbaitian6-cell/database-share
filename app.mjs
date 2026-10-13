@@ -13,8 +13,8 @@ import {
   RAINBOW_COUNT_DAYS, applyRainbowMarks, markTime, mergeMarks, varietyRainbowRows,
   ROTATION_DAYS, byLongestGap, daysSinceRainbow, rackDays, rainbowVarietyMax, windowDays,
   SUFFIX_PERIODS, hasSuffixSummary, suffixesOf, zoromeEndingsOf, suffixLabel, suffixReport,
-  varietyWeek,
-} from './data.mjs?v=6285c2409150';
+  varietyWeek, varietyMaxRacksFor,
+} from './data.mjs?v=a5425245dcf5';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -480,7 +480,7 @@ function openIdle() {
         <label><span>期間</span><select data-idle="minDays">${options(IDLE_DAY_CHOICES, view.minDays, d => `${d}日以上`)}</select></label>
         <label><span>ゲーム数</span><select data-idle="games">${options(IDLE_GAMES_CHOICES, view.games, g => `${count(g)}G未満`)}</select></label>
       </div>
-      <p class="caption">バラエティ（その日1〜3台の機種）の台で、選んだ日から前へ${view.minDays}日（カレンダーの日数）以上、毎日${games}未満の台です。記録の無い日（サイトが落ちていた日など）は飛ばして数えます。期間の長い順。台を押すとその台のデータが見られます。</p>
+      <p class="caption">バラエティ（その日1〜${varietyMaxRacksFor(state.store)}台の機種）の台で、選んだ日から前へ${view.minDays}日（カレンダーの日数）以上、毎日${games}未満の台です。記録の無い日（サイトが落ちていた日など）は飛ばして数えます。期間の長い順。台を押すとその台のデータが見られます。</p>
       ${racks.length ? `<h3 class="num">${racks.length}台</h3>${tapList(racks.map((x, i) => ({
         lead: '', attrs: `data-idle-rack="${i}"`,
         main: `<span class="rack num">${x.latest.rack}番${rackMark(x.latest)}</span><span class="machine" style="display:block">${esc(displayMachineName(x.latest.machine))}</span>`

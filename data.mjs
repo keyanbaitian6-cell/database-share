@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=6285c2409150';
+import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=a5425245dcf5';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -237,6 +237,8 @@ export function viewerNameFrom(text) {
 
 /** バラエティ（その日その店で1〜3台の機種）。Android `varietyMaxRacks` と同じ。 */
 export const VARIETY_MAX_RACKS = 3;
+/** 幸町は1〜2台（2026-10-13利用者指定）、ほかの店舗は1〜3台。 */
+export const varietyMaxRacksFor = store => store === 'saiwaichou' ? 2 : VARIETY_MAX_RACKS;
 /** 回っていない台：期間（カレンダーの日数）とゲーム数の選択肢・既定値（閲覧ページ variety_idle.dart と同じ）。 */
 export const IDLE_DAY_CHOICES = [3, 5, 7, 10, 14], IDLE_DEFAULT_DAYS = 7;
 export const IDLE_GAMES_CHOICES = [500, 1000, 1500, 2000, 3000], IDLE_DEFAULT_GAMES = 1000;
@@ -268,7 +270,7 @@ export function idleVarietyRacks(byDay, store, day, {minDays = IDLE_DEFAULT_DAYS
   const index = new Map(days.map(d => [d, new Map(byDay.get(`${store}|${d}`).map(r => [`${r.machine}|${r.rack}`, r]))]));
   const result = [];
   for (const r of dayRows) {
-    if (counts.get(r.machine) > VARIETY_MAX_RACKS) continue;
+    if (counts.get(r.machine) > varietyMaxRacksFor(store)) continue;
     const run = [];
     for (const d of days) {
       const row = index.get(d).get(`${r.machine}|${r.rack}`);
