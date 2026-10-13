@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=f8a25da5e475';
+import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=44d156f5d953';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -488,9 +488,9 @@ function weeklyScorer(byDay) {
   return cached;
 }
 
-/** 幸町の最新の並びの1台機種。選択日の前日まで7日、台番号ごと（既存の🌈表と同じ）。 */
+/** 幸町の最新の並びの1台機種。選択日を含む7日（2026-10-13 利用者「当日を含む7日間」）、台番号ごと（既存の🌈表と同じ）。 */
 export function varietyWeek(byDay, store, day) {
-  const days = windowDays(day, 8).slice(0, 7), score = weeklyScorer(byDay);
+  const days = windowDays(day), score = weeklyScorer(byDay);
   const rows = store === 'saiwaichou' ? varietyRainbowRows(byDay, store, day).map(x => {
     const records = rackDays(byDay, store, x.rack, days).filter(Boolean);
     const high = records.map(record => ({record, score: score(record)})).filter(x => x.score.total != null && x.score.total >= 70);

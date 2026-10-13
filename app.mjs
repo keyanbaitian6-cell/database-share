@@ -14,7 +14,7 @@ import {
   ROTATION_DAYS, byLongestGap, daysSinceRainbow, rackDays, rainbowVarietyMax, windowDays,
   SUFFIX_PERIODS, hasSuffixSummary, suffixesOf, zoromeEndingsOf, suffixLabel, suffixReport,
   varietyWeek, varietyMaxRacksFor, rainbowTodayRows,
-} from './data.mjs?v=f8a25da5e475';
+} from './data.mjs?v=44d156f5d953';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -667,7 +667,7 @@ function openVariety() {
       }).join('')}</ol>` : '<p class="note">候補はありません</p>'}</div>`;
     const marked = report.rows.filter(x => x.rainbowDays > 0);
     return `<h3 class="candidate-heading">7日間🌈なしの候補</h3><p class="candidate-period">${report.days[0]}〜${report.days.at(-1)}</p>
-      <p class="caption">幸町・1台機種。前日まで7日間に🌈の記録がない台です。70点以上の日がある台も候補に残し、点数を添えます。</p>
+      <p class="caption">幸町・1台機種。選んだ日を含む7日間に🌈の記録がない台です。70点以上の日がある台も候補に残し、点数を添えます。</p>
       <h4 class="candidate-count">候補 ${report.noRainbow.length}台</h4>
       ${group(report.noRainbow, 'none')}
       ${report.noRainbow.some(x => x.observedDays < 7) ? '<p class="note">未取得の日の🌈はわかりません。</p>' : ''}
