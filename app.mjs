@@ -5,7 +5,8 @@
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument} from './viewer_parts.mjs?v=403efdf186fb';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=db21eb24b286';
+import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=db21eb24b286';
 import {
   MERUHEN_STORES, compactSigned, dayNet, daySummary, displayMachineName, eventLabel, indexRecords,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom,
@@ -15,7 +16,7 @@ import {
   ROTATION_DAYS, byLongestGap, daysSinceRainbow, rackDays, rainbowVarietyMax, windowDays,
   SUFFIX_PERIODS, hasSuffixSummary, suffixesOf, zoromeEndingsOf, suffixLabel, suffixReport,
   varietyWeek, varietyMaxRacksFor, rainbowTodayRows,
-} from './data.mjs?v=403efdf186fb';
+} from './data.mjs?v=db21eb24b286';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -32,7 +33,7 @@ const TIMEOUT_MS = 30000;
 
 const app = document.getElementById('app');
 const reload = document.getElementById('reload');
-const state = {id: null, name: null, model: null, store: null, year: 0, month: 0, loading: false};
+const state = {id: null, name: null, model: null, store: null, year: 0, month: 0, loading: false, notice: ''};
 
 const esc = (s) => String(s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'})[c]);
 const tone = (n) => (n > 0 ? 'plus' : n < 0 ? 'minus' : 'zero');
@@ -66,6 +67,11 @@ async function getJson(url) {
 }
 
 async function load() {
+  const loadingId = state.id;
+  state.notice = '';
+  if (globalThis.navigator?.onLine === false && state.model) {
+    state.notice = 'オフラインです。保存済みのデータを表示しています。'; render(); return;
+  }
   state.loading = true;
   reload.disabled = true;
   if (!state.model) {
@@ -75,26 +81,44 @@ async function load() {
   const [meruhen, pscube, events, pscubeEvents, rainbow] = await Promise.allSettled(
     [state.name ? `?u=${state.name}` : '', '?file=pscube', '?file=events', '?file=pscube-events', '?file=rainbow']
       .map((q, i) => i < 2 ? fetchViewerDocument(base + q, i === 0 ? 'meruhen' : 'pscube', getJson) : getJson(base + q)));
-  state.loading = false;
-  reload.disabled = false;
   const doc = (r) => (r.status === 'fulfilled' && r.value && !r.value.error ? r.value : null);
   const m = doc(meruhen), p = doc(pscube);
+  if (loadingId !== state.id) return;
   if (!m && !p) {
+    state.loading = false; reload.disabled = false;
     const reason = [meruhen, pscube].map(r => (r.status === 'rejected' ? r.reason?.message : r.value?.error)).find(Boolean);
-    showSetup(`読み込めませんでした。リンクが正しいか、少し待ってからもう一度お試しください。${reason ? `（${reason}）` : ''}`);
+    if (state.model) { state.notice = '更新できませんでした。保存済みのデータを表示しています。'; render(); }
+    else showSetup(`読み込めませんでした。リンクが正しいか、少し待ってからもう一度お試しください。${reason ? `（${reason}）` : ''}`);
     return;
   }
+  const saved = await readOfflineMetadata(state.id).catch(() => ({}));
+  const metadata = {events: doc(events) || saved.events, pscubeEvents: doc(pscubeEvents) || saved.pscubeEvents,
+    rainbow: doc(rainbow) || saved.rainbow};
+  // 旧Googleスクリプトの全件応答も、端末履歴へ初回移行できる。
+  try {
+    if (m) await rememberViewerHistory(base, 'meruhen', m, undefined, !m.history);
+    if (p) await rememberViewerHistory(base, 'pscube', p, undefined, !p.history);
+    await saveOfflineMetadata(state.id, metadata);
+  } catch { state.notice = '端末への保存に失敗しました。空き容量とブラウザの保存設定を確認してください。'; }
+  state.notice ||= (!m || !p) ? '一部の更新に失敗しました。保存済みのデータを併用しています。' : '';
+  const localM = m || await readViewerHistory(base, 'meruhen').catch(() => null);
+  const localP = p || await readViewerHistory(base, 'pscube').catch(() => null);
+  state.loading = false; reload.disabled = false;
+  showDocuments(localM, localP, metadata);
+}
+
+function showDocuments(m, p, metadata = {}) {
   const records = [...meruhenRecords(m), ...pscubeRecords(p)];
   const byDay = indexRecords(records);
   // ほかの端末（閲覧ページ・共有ページ）で付け外しした🌈と、この端末の分（PCが取り込む前でも出す）。
-  const sharedMarks = doc(rainbow)?.marks;
+  const sharedMarks = metadata.rainbow?.marks;
   const marks = mergeMarks(Array.isArray(sharedMarks) ? sharedMarks : [], localMarks());
   applyRainbowMarks(byDay, marks);
   const stores = [...Object.keys(MERUHEN_STORES), ...new Set(records.map(r => r.store).filter(s => s.startsWith('pscube:')))]
     .filter(s => records.some(r => r.store === s));
   state.model = {
     byDay, stores, marks,
-    events: mergeEvents(m?.date_events, doc(events)?.events, p?.date_events, doc(pscubeEvents)?.events),
+    events: mergeEvents(m?.date_events, metadata.events?.events, p?.date_events, metadata.pscubeEvents?.events),
     exportedAt: [m?.exported_at, p?.exported_at].filter(Boolean).sort().pop() ?? null,
   };
   if (!stores.includes(state.store)) state.store = stores.includes(store.get(STORE_KEY)) ? store.get(STORE_KEY) : stores[0];
@@ -161,6 +185,7 @@ function render() {
         <div class="weekdays" aria-hidden="true">${WEEKDAYS.map(w => `<span>${w}</span>`).join('')}</div>
         <div class="grid">${cells}</div>
       </div>
+      ${state.notice ? `<p class="legend" role="status">${esc(state.notice)}</p>` : ''}
       <p class="legend">${esc(exportedText(model.exportedAt))}${model.exportedAt ? '。' : ''}差枚＝その日の総差枚（メルヘンは推定）。＊＝前日までに入力した記録がないイベント。</p>
     </section>`;
 }
@@ -823,11 +848,30 @@ function rememberName(fromLink) {
   state.name = name && NAME.test(name) ? name : null;
 }
 
-function connect(id) {
+async function connect(id) {
+  if (state.id !== id) state.model = null;
+  state.loading = false; reload.disabled = false;
   state.id = id;
   store.set(ID_KEY, id);
   reload.hidden = false;
-  load();
+  const base = `https://script.google.com/macros/s/${id}/exec`;
+  try {
+    const results = await Promise.allSettled([readViewerHistory(base, 'meruhen'), readViewerHistory(base, 'pscube'), readOfflineMetadata(id)]);
+    const [m, p, metadata] = results.map(r => r.status === 'fulfilled' ? r.value : null);
+    if (state.id !== id) return;
+    if (m || p) {
+      state.notice = results.some(r => r.status === 'rejected')
+        ? '一部の保存データを開けませんでした。「最新を読む」で復元してください。'
+        : '端末に保存したデータを表示しています。更新するには「最新を読む」を押してください。';
+      showDocuments(m, p, metadata || {}); return;
+    }
+    if (results.some(r => r.status === 'rejected')) throw new Error('保存した履歴を開けませんでした。');
+  } catch {
+    if (state.id !== id) return;
+    app.innerHTML = '<p class="status">保存したデータを開けませんでした。オンラインで右上の「最新を読む」を押してください。保存データは消していません。</p>';
+    return;
+  }
+  if (state.id === id) load();
 }
 
 app.addEventListener('click', (e) => {
@@ -871,4 +915,5 @@ function start() {
   });
 }
 
+prepareOffline().catch(() => { /* オフライン用ファイルの取得失敗は次回オンライン起動で再試行。 */ });
 start();
