@@ -1,0 +1,24 @@
+{
+  "id": "./android.html",
+  "name": "database共有",
+  "short_name": "database共有",
+  "start_url": "./android.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "./icon-192.png?v=403efdf186fb",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-512.png?v=403efdf186fb",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
