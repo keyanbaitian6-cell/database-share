@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=c49dd93790f3';
+import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=432146aade39';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -142,10 +142,39 @@ export function indexRecords(records) {
   return byDay;
 }
 
-/** その日の総差枚（差枚のある台だけ足す。1台も無ければ total は null で、0にしない）。 */
+/**
+ * その台がプラスで終わったか（true/false）、分からなければ null（勝率に数えない）。差枚があればその符号、
+ * 無ければグラフの終点がゼロ線より上か（採点の終点と同じく1ピクセル以内はプラスにしない。アナスロ補完は
+ * こちらで決まる）。大当たり0回でグラフを取らない台はマイナス。PC core.rack_won・Android SlotRecord.won と同じ。
+ */
+export function rackWon(r) {
+  if (!(r.games > 0)) return null;
+  if (r.net != null) return r.net > 0;
+  if (r.store.startsWith('pscube:') || meruhenNetHidden(r.store, r.day)) return null;
+  const g = r.graph;
+  if (g && typeof g === 'object') {
+    const end = Number(g.baseline_y) - Number(g.end_y);
+    return Number.isFinite(end) ? end > 1 : null;
+  }
+  return r.bb + r.rb === 0 ? false : null;
+}
+
+/**
+ * カレンダーの1日に総差枚の代わりに勝率を出すか：差枚の分かる台が、勝ち負けの分かる台の半分に満たない日
+ * （2026-10-17 利用者「差枚を出せないところについては勝率を書いてほしい」）。PC core.show_win_rate と同じ。
+ */
+export const showWinRate = (captured, judged) => judged > 0 && captured * 2 < judged;
+
+/** 「勝率48%」。整数で四捨五入（0.5は切り上げ）。PC core.win_rate_text と同じ。 */
+export const winRateText = (won, judged) => `勝率${Math.floor((200 * won + judged) / (2 * judged))}%`;
+
+/** その日の総差枚（差枚のある台だけ足す。1台も無ければ total は null で、0にしない）と、勝ち負けの分かる台数・プラスの台数。 */
 export function dayNet(racks) {
   const nets = racks.filter(r => r.net != null);
-  return {total: nets.length ? nets.reduce((s, r) => s + r.net, 0) : null, captured: nets.length, racks: racks.length};
+  const results = racks.map(rackWon).filter(w => w != null);
+  const judged = results.length, won = results.filter(Boolean).length;
+  return {total: nets.length ? nets.reduce((s, r) => s + r.net, 0) : null, captured: nets.length, racks: racks.length,
+          judged, won, winRate: showWinRate(nets.length, judged)};
 }
 
 /** その日の差枚TOP50（差枚の多い順）と強かった機種10選（1台あたりの平均回転数、2台以上の機種）。 */

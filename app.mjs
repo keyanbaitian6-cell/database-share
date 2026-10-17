@@ -5,18 +5,18 @@
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=c49dd93790f3';
-import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=c49dd93790f3';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=432146aade39';
+import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=432146aade39';
 import {
   MERUHEN_STORES, compactSigned, dayNet, daySummary, displayMachineName, eventLabel, indexRecords,
-  meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom,
+  meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
   IDLE_DAY_CHOICES, IDLE_DEFAULT_DAYS, IDLE_DEFAULT_GAMES, IDLE_GAMES_CHOICES, idleVarietyRacks, storeDays,
   RAINBOW, lastRainbowDay, lastRainbowText, rackMark, storeHasRainbow,
   RAINBOW_COUNT_DAYS, applyRainbowMarks, markTime, mergeMarks, varietyRecordRows,
   ROTATION_DAYS, byLongestGap, daysSinceRainbow, rackDays, rainbowVarietyMax, windowDays,
   SUFFIX_PERIODS, hasSuffixSummary, suffixesOf, zoromeEndingsOf, suffixLabel, suffixReport,
   varietyWeek, varietyMaxRacksFor, rainbowTodayRows,
-} from './data.mjs?v=c49dd93790f3';
+} from './data.mjs?v=432146aade39';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -149,10 +149,13 @@ function render() {
     const net = dayNet(racks);
     const event = eventLabel(model.events.get(`${state.store}|${day}`));
     const date = Number(day.slice(8));
-    const label = [`${state.month}月${date}日`, event, net.total != null ? `総差枚 ${signed(net.total)}` : ''].filter(Boolean).join('、');
+    const rate = net.winRate ? winRateText(net.won, net.judged) : '';
+    const label = [`${state.month}月${date}日`, event,
+      rate ? `${net.judged}台中${net.won}台プラス、${rate}` : net.total != null ? `総差枚 ${signed(net.total)}` : ''].filter(Boolean).join('、');
     const inner = `<span class="date num">${date}</span>`
       + (event ? `<span class="event">${esc(event)}</span>` : '')
-      + (net.total != null ? `<span class="net num ${tone(net.total)}">${compactSigned(net.total)}</span>` : '');
+      + (rate ? `<span class="net num zero">${rate}</span>`
+        : net.total != null ? `<span class="net num ${tone(net.total)}">${compactSigned(net.total)}</span>` : '');
     const cls = `day${day === today.day ? ' today' : ''}`;
     return racks.length
       ? `<button type="button" class="${cls}" data-open="${day}" aria-label="${esc(label)}">${inner}</button>`
@@ -186,7 +189,7 @@ function render() {
         <div class="grid">${cells}</div>
       </div>
       ${state.notice ? `<p class="legend" role="status">${esc(state.notice)}</p>` : ''}
-      <p class="legend">${esc(exportedText(model.exportedAt))}${model.exportedAt ? '。' : ''}差枚＝その日の総差枚（メルヘンは推定）。＊＝前日までに入力した記録がないイベント。</p>
+      <p class="legend">${esc(exportedText(model.exportedAt))}${model.exportedAt ? '。' : ''}差枚＝その日の総差枚（メルヘンは推定）。差枚の分かる台が半分に満たない日（アナスロ補完の日など）は勝率＝プラスで終わった台の割合（グラフの終点で判定）。＊＝前日までに入力した記録がないイベント。</p>
     </section>`;
 }
 
@@ -437,6 +440,9 @@ function openDay(first) {
       ${net.total != null ? `<p class="total"><span class="label">総${netName}</span>
         <span class="value num ${tone(net.total)}">${signed(net.total)}</span>
         <span class="sub num">${netName}がわかった台 ${net.captured}/${net.racks}台</span></p>` : ''}
+      ${net.winRate ? `<p class="total" data-win-rate><span class="label">勝率</span>
+        <span class="value num zero">${winRateText(net.won, net.judged)}</span>
+        <span class="sub num">${net.judged}台中${net.won}台プラス（${netName}の分からない台が多い日）</span></p>` : ''}
       <h3>TOP50</h3>
       <p class="caption">${netName}の多い順。台を押すと、その機種の台一覧が見られます。</p>
       ${top.length ? tapList(rankRows(top.slice(0, TOP_RACKS_OPEN), 0, index))
