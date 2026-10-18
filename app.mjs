@@ -1,3 +1,4 @@
+import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName} from './event_history.mjs?v=4a9874df7a03';
 // 閲覧専用の共有ページ（お試し、2026-10-09。EVENT_CALENDAR.md「閲覧専用の共有ページ」）。
 // 読むだけのApps Script（database_android/tool/viewer_drive_script_readonly.gs）からDriveのファイルを読み、
 // イベントカレンダー（各日のイベント・総差枚）と、日付を押したときの差枚TOP50（11位からは折りたたみ）・強かった機種10選、
@@ -5,8 +6,8 @@
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=7da60ee5b549';
-import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=7da60ee5b549';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=4a9874df7a03';
+import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=4a9874df7a03';
 import {
   MERUHEN_STORES, calendarDay, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
@@ -18,7 +19,7 @@ import {
   varietyWeek, varietyMaxRacksFor, rainbowTodayRows,
   monthDayList, periodWinRate, winRateYears, yearWinRates, loadFailureText,
   characterBirthdayCellLabel, characterBirthdaysOn, parseCharacterBirthdays,
-} from './data.mjs?v=7da60ee5b549';
+} from './data.mjs?v=4a9874df7a03';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -36,9 +37,10 @@ const TIMEOUT_MS = 30000;
 const app = document.getElementById('app');
 const reload = document.getElementById('reload');
 const state = {id: null, name: null, model: null, store: null, year: 0, month: 0, loading: false, notice: '',
-  birthdays: new Map()};
+  birthdays: new Map(), eventHistory: null, historyNotice: ''};
 
 const esc = (s) => String(s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'})[c]);
+const machineKey = (s) => String(s ?? '').replaceAll('+', ' ').replace(/\s+/g, ' ').trim();
 const tone = (n) => (n > 0 ? 'plus' : n < 0 ? 'minus' : 'zero');
 const store = {
   get(key) { try { return localStorage.getItem(key); } catch { return null; } },
@@ -75,7 +77,7 @@ async function getJson(url) {
  */
 async function loadBirthdays() {
   try {
-    const response = await fetch('./character_birthdays.json?v=7da60ee5b549', {credentials: 'omit'});
+    const response = await fetch('./character_birthdays.json?v=4a9874df7a03', {credentials: 'omit'});
     if (!response.ok) return;
     state.birthdays = parseCharacterBirthdays(await response.json());
     if (state.model) render();
@@ -101,8 +103,8 @@ async function load() {
     app.innerHTML = '<p class="status">Googleドライブから読み込んでいます…<br>最初の読み込みは、1分ほどかかることがあります。</p>';
   }
   const base = `https://script.google.com/macros/s/${state.id}/exec`;
-  const [meruhen, pscube, events, pscubeEvents, rainbow] = await Promise.allSettled(
-    [state.name ? `?u=${state.name}` : '', '?file=pscube', '?file=events', '?file=pscube-events', '?file=rainbow']
+  const [meruhen, pscube, events, pscubeEvents, rainbow, history] = await Promise.allSettled(
+    [state.name ? `?u=${state.name}` : '', '?file=pscube', '?file=events', '?file=pscube-events', '?file=rainbow', '?file=event-history']
       .map((q, i) => i < 2 ? fetchViewerDocument(base + q, i === 0 ? 'meruhen' : 'pscube', getJson) : getJson(base + q)));
   const doc = (r) => (r.status === 'fulfilled' && r.value && !r.value.error ? r.value : null);
   const m = doc(meruhen), p = doc(pscube);
@@ -118,7 +120,12 @@ async function load() {
   }
   const saved = await readOfflineMetadata(state.id).catch(() => ({}));
   const metadata = {events: doc(events) || saved.events, pscubeEvents: doc(pscubeEvents) || saved.pscubeEvents,
-    rainbow: doc(rainbow) || saved.rainbow};
+    rainbow: doc(rainbow) || saved.rainbow, eventHistory: saved.eventHistory};
+  try {
+    const freshHistory = doc(history);
+    if (freshHistory) { parsePrivateHistory(freshHistory); metadata.eventHistory = freshHistory; }
+    state.historyNotice = freshHistory ? '' : '最新の履歴を取得できません。保存済みの履歴があれば表示します。Apps ScriptとPCの共有ファイルを確認してください。';
+  } catch (error) { state.historyNotice = `履歴を更新できません：${error.message}`; }
   // 旧Googleスクリプトの全件応答も、端末履歴へ初回移行できる。
   try {
     if (m) await rememberViewerHistory(base, 'meruhen', m, undefined, !m.history);
@@ -133,6 +140,10 @@ async function load() {
 }
 
 function showDocuments(m, p, metadata = {}) {
+  state.eventHistory = null;
+  try {
+    if (metadata.eventHistory) state.eventHistory = parsePrivateHistory(metadata.eventHistory);
+  } catch (error) { state.historyNotice = `履歴ファイルを読めません：${error.message}`; }
   const records = [...meruhenRecords(m), ...pscubeRecords(p)];
   const byDay = indexRecords(records);
   // ほかの端末（閲覧ページ・共有ページ）で付け外しした🌈と、この端末の分（PCが取り込む前でも出す）。
@@ -212,6 +223,7 @@ function render() {
       <button type="button" class="pill pill-outline" data-idle-open>バラエティの回っていない台</button>
       ${Object.hasOwn(MERUHEN_STORES, state.store) ? `<button type="button" class="pill pill-outline" data-variety-open>バラエティ${RAINBOW}</button>` : ''}
       ${hasSuffixSummary(state.store) ? '<button type="button" class="pill pill-outline" data-suffix-open>末尾別データまとめ</button>' : ''}
+      ${state.store === 'nagamachiminami' ? '<button type="button" class="pill pill-outline" data-event-history-open>イベント履歴</button>' : ''}
       <button type="button" class="pill pill-outline" data-year-open>月別・年間の勝率</button>
     </div>
     <div class="months">
@@ -309,7 +321,8 @@ function daysOfView(view) {
   if (view.kind === 'summary') return summaryDays(state.store);
   if (view.kind === 'birthday') return [view.day];
   const all = storeDays(byDay, state.store);
-  if (view.kind === 'machine') return all.filter(d => has(state.store, d, x => x.machine === view.machine));
+  if (view.kind === 'historyMachine') return all.filter(d => has(state.store, d, x => x.machine === view.machine));
+  if (view.kind === 'machine') return all.filter(d => has(state.store, d, x => machineKey(x.machine) === machineKey(view.machine)));
   return all;
 }
 
@@ -329,7 +342,7 @@ function setViewDay(view, day) {
 /** 上に固定する見出し（下まで送っても、何の画面か分かるように）。 */
 function titleOfView(view) {
   if (view.kind === 'rack') return `${view.rack.rack}番台${view.rack.rainbow ? ` ${RAINBOW}` : ''}`;
-  if (view.kind === 'machine') return displayMachineName(view.machine);
+  if (view.kind === 'machine' || view.kind === 'historyMachine') return displayMachineName(view.machine);
   if (view.kind === 'idle') return 'バラエティの回っていない台';
   if (view.kind === 'variety' && view.mode === 'today') return 'バラエティ🌈 本日';
   if (view.kind === 'variety') return view.mode === 'week' ? 'バラエティの候補' : `バラエティ${RAINBOW}一覧`;
@@ -337,6 +350,7 @@ function titleOfView(view) {
   if (view.kind === 'suffixList') return `${suffixLabel(view.suffix)}の内訳`;
   if (view.kind === 'year') return '月別・年間の勝率';
   if (view.kind === 'birthday') return 'キャラ誕生日';
+  if (view.kind === 'history') return 'イベント履歴';
   return 'その日のまとめ';
 }
 
@@ -363,6 +377,7 @@ function openSheet({first, body, onRow, onChange, onAction}) {
       </div>`;
   };
   const dateBar = (view) => {
+    if (view.kind === 'history') return '';
     if (view.kind === 'year') return yearBar(view);
     const days = daysOfView(view), day = dayOfView(view);
     const index = days.indexOf(day);
@@ -453,7 +468,7 @@ function openSheet({first, body, onRow, onChange, onAction}) {
       return;
     }
     // 画面の中の切り替え（例：バラエティ🌈の表・空き順）。描き直す。
-    const action = e.target.closest('[data-variety-mode]');
+    const action = e.target.closest('[data-variety-mode], [data-history-type]');
     if (action && onAction) {
       view.scroll = 0;
       onAction(action, view);
@@ -1013,6 +1028,45 @@ function openBirthdays(first) {
   });
 }
 
+/** 画像から記録した長町南のイベント履歴。記号は意味付けせず、同日の機種一覧へつなぐ。 */
+function openEventHistory() {
+  if (state.store !== 'nagamachiminami') return;
+  if (!state.eventHistory) {
+    toast(state.historyNotice || '履歴がまだありません。PCで共有へ反映し、Apps Scriptを更新してから再読み込みしてください。'); return;
+  }
+  const index = new Map();
+  for (const [key, records] of state.model.byDay) {
+    if (key.startsWith('nagamachiminami|')) index.set(key.slice('nagamachiminami|'.length), new Set(records.map(r=>r.machine)));
+  }
+  const historyView = view => {
+    const weeks = state.eventHistory.weeks.filter(w=>w.type===view.type);
+    const types = `<h2 id="sheet-title">長町南のイベント履歴</h2><div class="history-types">${HISTORY_TYPES.map(t=>`<button type="button" class="pill ${t===view.type?'':'pill-outline'}" data-history-type="${esc(t)}" aria-pressed="${t===view.type}">${esc(t)}</button>`).join('')}</div>`;
+    const notice = state.historyNotice ? `<p class="note">${esc(state.historyNotice)}</p>` : '';
+    const rejected = state.eventHistory.rejected ? `<p class="note">形式が合わない編集${count(state.eventHistory.rejected)}件を表示していません。</p>` : '';
+    if (!weeks.length) return `${types}${notice}<p class="note">この種別の週表はまだありません。</p>`;
+    return `${types}${notice}${rejected}${weeks.map(w=>{
+      const days=Array.from({length:7},(_,i)=>historyDay(w.from,i));
+      const rows=w.machines.map(item=>`<tr><th scope="row"><span>${esc(displayMachineName(item.name))}</span><small>${count(item.count)}台</small></th>${days.map((d,i)=>{
+        const name=historySavedName(item,index.get(d)??new Set());
+        return `<td><span class="history-symbol">${esc(item.results[i])}</span>${name ? `<button type="button" class="row history-cell" data-history-machine="${esc(name)}" data-history-day="${d}" aria-label="${esc(d)} ${esc(name)}のデータを開く">開く →</button>` : '<small>この日の記録なし</small>'}</td>`;
+      }).join('')}</tr>`).join('');
+      return `<section class="history-week"><h3>${esc(w.from)}〜${esc(w.to)}</h3>${w.lineup_day?`<p class="note">分類日：${esc(w.lineup_day)}（作成時の構成で固定）</p>`:''}<div class="history-overflow"><table class="history-table"><thead><tr><th>機種名・台数</th>${days.map(d=>`<th>${esc(shortDateWeek(d))}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div></section>`;
+    }).join('')}<p class="note">記号の意味は未設定です。「開く」は、その機種・その日の保存データを表示します。</p>`;
+  };
+  const machineView = view => {
+    const racks=(state.model.byDay.get(`nagamachiminami|${view.day}`)??[]).filter(r=>r.machine===view.machine).sort((a,b)=>a.rack-b.rack);
+    view.items=racks;
+    return `<p class="store">${esc(storeLabel('nagamachiminami'))}　${dateLabel(view.day)}</p><h2 id="sheet-title" class="long">${esc(displayMachineName(view.machine))}</h2><p class="caption">台を押すと、その日のデータを開きます。</p>${racks.length?tapList(racks.map((r,i)=>({lead:'',attrs:`data-history-rack="${i}"`,main:`<span class="machine num" style="display:block">${r.rack}番${rackMark(r)}</span><span class="rack num">BB ${r.bb}・RB ${r.rb}</span>`,right:`${netCell(r)}<span class="small num">${count(r.games)}G</span>`}))):'<p class="note">この日の機種データはありません。</p>'}`;
+  };
+  openSheet({first:{kind:'history',type:HISTORY_TYPES[0]},
+    body:view=>view.kind==='history'?historyView(view):view.kind==='historyMachine'?machineView(view):rackView(view),
+    onAction:(action,view)=>{if(action.dataset.historyType) view.type=action.dataset.historyType;},
+    onRow:(row,push,view)=>{
+      if(view.kind==='history' && row.dataset.historyMachine && row.dataset.historyDay) push({kind:'historyMachine',machine:row.dataset.historyMachine,day:row.dataset.historyDay,picked:null});
+      else if(view.kind==='historyMachine' && row.dataset.historyRack!=null) push({kind:'rack',rack:view.items[Number(row.dataset.historyRack)]});
+    }});
+}
+
 /**
  * 月別・年間の勝率（2026-10-18 利用者「月ごとに月間の勝率出すのと、年間でも見れるページつくっておいてね」）。
  * 年の勝率と、1〜12月の勝率（勝ち負けの分かる日がある月だけ）。月を押すと、その月のカレンダーへ。
@@ -1049,7 +1103,7 @@ function openYear() {
 }
 
 app.addEventListener('click', (e) => {
-  const target = e.target.closest('[data-open], [data-summary-open], [data-birthday-open], [data-store], [data-month], [data-idle-open], [data-variety-open], [data-suffix-open], [data-year-open]');
+  const target = e.target.closest('[data-open], [data-summary-open], [data-birthday-open], [data-store], [data-month], [data-idle-open], [data-variety-open], [data-suffix-open], [data-year-open], [data-event-history-open]');
   if (!target || !state.model) return;
   if (target.dataset.open) { openDay(target.dataset.open); return; }
   if (target.dataset.summaryOpen) { openSummary(target.dataset.summaryOpen); return; }
@@ -1058,6 +1112,7 @@ app.addEventListener('click', (e) => {
   if (target.dataset.varietyOpen != null) { openVariety(); return; }
   if (target.dataset.suffixOpen != null) { openSuffix(); return; }
   if (target.dataset.yearOpen != null) { openYear(); return; }
+  if (target.dataset.eventHistoryOpen != null) { openEventHistory(); return; }
   if (target.dataset.store) {
     state.store = target.dataset.store;
     store.set(STORE_KEY, state.store);

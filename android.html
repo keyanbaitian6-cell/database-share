@@ -7,9 +7,9 @@
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#ffffff">
 <title>database カレンダー</title>
-<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=7da60ee5b549">
-<link rel="icon" type="image/png" sizes="32x32" href="./favicon.png?v=7da60ee5b549">
-<link rel="manifest" href="./manifest-android.json?v=7da60ee5b549">
+<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=4a9874df7a03">
+<link rel="icon" type="image/png" sizes="32x32" href="./favicon.png?v=4a9874df7a03">
+<link rel="manifest" href="./manifest-android.json?v=4a9874df7a03">
 <style>
   :root {
     --color-gallery-white: #ffffff;
@@ -250,6 +250,22 @@
   .rotation .c.none { background: transparent; cursor: default; }
   .rotation .gap { display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
   .big-gap { font-family: var(--font-display); font-size: 22px; font-weight: 600; }
+  /* イベント履歴：週ごとの機種×日表。狭い画面では表だけ横へ送る。 */
+  .history-types { display: flex; gap: 8px; margin: 12px 0 18px; }
+  .history-types .pill { flex: 1; min-width: 0; }
+  .history-week { margin: 20px 0 26px; }
+  .history-week h3 { margin: 0 0 8px; font-size: 18px; }
+  .history-overflow { overflow-x: auto; overscroll-behavior-x: contain; border: 1px solid var(--color-control-gray); border-radius: 8px; }
+  .history-table { border-collapse: collapse; min-width: 900px; width: 100%; table-layout: fixed; }
+  .history-table th, .history-table td { border-bottom: 1px solid var(--color-control-gray); border-right: 1px solid var(--color-control-gray); padding: 4px; text-align: center; }
+  .history-table tr:last-child th, .history-table tr:last-child td { border-bottom: 0; }
+  .history-table th:first-child { width: 200px; text-align: left; position: sticky; left: 0; z-index: 1; background: var(--color-paper, #fff); }
+  .history-table thead th { position: sticky; top: 0; background: #fff7cc; color: var(--color-ink); font-size: 12px; line-height: 1.25; }
+  .history-table tbody th { font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
+  .history-table tbody th small { display: block; color: var(--color-slate); font-size: 11px; }
+  .history-table .history-cell { display: block; width: 100%; min-height: 42px; padding: 0; border: 0; background: transparent; font: inherit; font-size: 12px; cursor: pointer; }
+  .history-table .history-cell:hover, .history-table .history-cell:focus-visible { background: var(--color-paper-frost); outline: 2px solid var(--color-pricing-blue); outline-offset: -2px; border-radius: 6px; }
+  .history-symbol { display: inline-block; min-height: 42px; font-size: 25px; line-height: 42px; }
   .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 50; max-width: calc(100vw - 32px);
     margin: 0; padding: 10px 16px; border-radius: 12px; background: rgba(29, 29, 31, .92); color: #fff; font-size: 13px; line-height: 1.4; }
   .choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 18px 0 12px; }
@@ -312,6 +328,6 @@
   <p>差枚＝その日の総差枚（差枚がわかった台の合計）。メルヘンはグラフと最大持玉からの推定差枚で、確定値ではありません（※は要確認）。P-STATIONは元グラフの差枚です。</p>
   <p>＊＝前日までに入力した記録がないイベント（当日以降の入力・時刻不明）。強かった機種＝1台あたりの平均回転数（2台以上ある機種）。</p>
 </footer>
-<script type="module" src="./app.mjs?v=7da60ee5b549"></script>
+<script type="module" src="./app.mjs?v=4a9874df7a03"></script>
 </body>
 </html>
