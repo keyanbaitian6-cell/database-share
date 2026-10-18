@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=432146aade39';
+import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=d977521e9a96';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -175,6 +175,29 @@ export function dayNet(racks) {
   const judged = results.length, won = results.filter(Boolean).length;
   return {total: nets.length ? nets.reduce((s, r) => s + r.net, 0) : null, captured: nets.length, racks: racks.length,
           judged, won, winRate: showWinRate(nets.length, judged)};
+}
+
+/**
+ * 閲覧用ファイルの day_summaries（保存したアナスロのHTMLからの日ごとの「何台中何台プラス」。台の数値は無い。
+ * 2026-10-18 利用者「各日の勝率、何台中何台プラスで終わったかをそれだけを乗せて欲しい」、PC html_day_summary.py）。
+ * `${store}|${day}` → {racks, judged, won}。形のおかしい日は捨てる。カレンダーは台データの無い日にだけ使う。
+ */
+export function daySummaries(doc) {
+  const out = new Map();
+  if (!doc || !Array.isArray(doc.day_summaries)) return out;
+  for (const d of doc.day_summaries) {
+    if (!d || !MERUHEN_STORES[d.store] || !DAY.test(d.day ?? '')) continue;
+    const {racks, judged, won} = d;
+    if (![racks, judged, won].every(Number.isSafeInteger) || !(0 <= won && won <= judged && judged <= racks)) continue;
+    out.set(`${d.store}|${d.day}`, {racks, judged, won});
+  }
+  return out;
+}
+
+/** カレンダーの1日に出すもの：台データがあればその日の差枚・勝率（dayNet）、無ければHTMLの集計（summary）。 */
+export function calendarDay(racks, summary) {
+  if (racks.length || !summary || summary.judged === 0) return {...dayNet(racks), summary: null};
+  return {total: null, captured: 0, racks: summary.racks, judged: summary.judged, won: summary.won, winRate: true, summary};
 }
 
 /** その日の差枚TOP50（差枚の多い順）と強かった機種10選（1台あたりの平均回転数、2台以上の機種）。 */

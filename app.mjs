@@ -5,10 +5,10 @@
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=432146aade39';
-import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=432146aade39';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=d977521e9a96';
+import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=d977521e9a96';
 import {
-  MERUHEN_STORES, compactSigned, dayNet, daySummary, displayMachineName, eventLabel, indexRecords,
+  MERUHEN_STORES, calendarDay, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
   IDLE_DAY_CHOICES, IDLE_DEFAULT_DAYS, IDLE_DEFAULT_GAMES, IDLE_GAMES_CHOICES, idleVarietyRacks, storeDays,
   RAINBOW, lastRainbowDay, lastRainbowText, rackMark, storeHasRainbow,
@@ -16,7 +16,7 @@ import {
   ROTATION_DAYS, byLongestGap, daysSinceRainbow, rackDays, rainbowVarietyMax, windowDays,
   SUFFIX_PERIODS, hasSuffixSummary, suffixesOf, zoromeEndingsOf, suffixLabel, suffixReport,
   varietyWeek, varietyMaxRacksFor, rainbowTodayRows,
-} from './data.mjs?v=432146aade39';
+} from './data.mjs?v=d977521e9a96';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -117,7 +117,7 @@ function showDocuments(m, p, metadata = {}) {
   const stores = [...Object.keys(MERUHEN_STORES), ...new Set(records.map(r => r.store).filter(s => s.startsWith('pscube:')))]
     .filter(s => records.some(r => r.store === s));
   state.model = {
-    byDay, stores, marks,
+    byDay, stores, marks, summaries: daySummaries(m),
     events: mergeEvents(m?.date_events, metadata.events?.events, p?.date_events, metadata.pscubeEvents?.events),
     exportedAt: [m?.exported_at, p?.exported_at].filter(Boolean).sort().pop() ?? null,
   };
@@ -146,7 +146,8 @@ function render() {
   const cells = weeks.flat().map(day => {
     if (!day) return '<div class="blank" aria-hidden="true"></div>';
     const racks = model.byDay.get(`${state.store}|${day}`) ?? [];
-    const net = dayNet(racks);
+    // 台データの無い日は、保存したHTMLからの「何台中何台プラス」（day_summaries）で勝率を出す。
+    const net = calendarDay(racks, model.summaries.get(`${state.store}|${day}`));
     const event = eventLabel(model.events.get(`${state.store}|${day}`));
     const date = Number(day.slice(8));
     const rate = net.winRate ? winRateText(net.won, net.judged) : '';
@@ -159,6 +160,7 @@ function render() {
     const cls = `day${day === today.day ? ' today' : ''}`;
     return racks.length
       ? `<button type="button" class="${cls}" data-open="${day}" aria-label="${esc(label)}">${inner}</button>`
+      : net.summary ? `<button type="button" class="${cls}" data-summary-open="${day}" aria-label="${esc(label)}">${inner}</button>`
       : `<div class="${cls}" aria-label="${esc(label)}">${inner}</div>`;
   }).join('');
   app.innerHTML = `
@@ -189,7 +191,7 @@ function render() {
         <div class="grid">${cells}</div>
       </div>
       ${state.notice ? `<p class="legend" role="status">${esc(state.notice)}</p>` : ''}
-      <p class="legend">${esc(exportedText(model.exportedAt))}${model.exportedAt ? '。' : ''}差枚＝その日の総差枚（メルヘンは推定）。差枚の分かる台が半分に満たない日（アナスロ補完の日など）は勝率＝プラスで終わった台の割合（グラフの終点で判定）。＊＝前日までに入力した記録がないイベント。</p>
+      <p class="legend">${esc(exportedText(model.exportedAt))}${model.exportedAt ? '。' : ''}差枚＝その日の総差枚（メルヘンは推定）。差枚の分かる台が半分に満たない日（アナスロ補完の日など）は勝率＝プラスで終わった台の割合（グラフの終点で判定）。台のデータが無い日の勝率は、保存したアナスロのHTMLから数えたもの（押すと何台中何台プラスか）。＊＝前日までに入力した記録がないイベント。</p>
     </section>`;
 }
 
@@ -247,6 +249,16 @@ function rackView({rack: r}) {
  * どの画面も上に固定した帯に「‹ 前の日・日付・次の日 ›」を出す。選べる日は、その画面に記録がある日（新しい順）。
  */
 
+/** HTMLの集計だけがある日（台データの無い日、新しい順）。 */
+function summaryDays(storeKey) {
+  const out = [];
+  for (const key of state.model.summaries.keys()) {
+    const [s, day] = key.split('|');
+    if (s === storeKey && !(state.model.byDay.get(key) ?? []).length && state.model.summaries.get(key).judged > 0) out.push(day);
+  }
+  return out.sort().reverse();
+}
+
 /** 画面の選べる日（新しい順）。台のデータは同じ店・機種・台番号の記録がある日、機種の台一覧はその機種がある日。 */
 function daysOfView(view) {
   if (view.kind === 'variety' && view.mode === 'today') return [view.todayDay];
@@ -260,6 +272,7 @@ function daysOfView(view) {
     const r = view.rack;
     return storeDays(byDay, r.store).filter(d => has(r.store, d, x => x.machine === r.machine && x.rack === r.rack));
   }
+  if (view.kind === 'summary') return summaryDays(state.store);
   const all = storeDays(byDay, state.store);
   if (view.kind === 'machine') return all.filter(d => has(state.store, d, x => x.machine === view.machine));
   return all;
@@ -900,10 +913,35 @@ async function connect(id) {
   if (state.id === id) load();
 }
 
+/**
+ * 台データの無い日を押したとき：保存したアナスロのHTMLから数えた、その日の勝率と何台中何台プラスか（台の一覧は無い）。
+ * 日付送りは、同じくHTMLの集計だけがある日（2026-10-18 利用者「各日の勝率、何台中何台プラスで終わったかをそれだけを」）。
+ */
+function openSummary(first) {
+  if (!state.model.summaries.get(`${state.store}|${first}`)) return;
+  openSheet({
+    first: {kind: 'summary', day: first},
+    body: (view) => {
+      const s = state.model.summaries.get(`${state.store}|${view.day}`);
+      const event = eventLabel(state.model.events.get(`${state.store}|${view.day}`));
+      return `
+      <p class="store">${esc(storeLabel(state.store))}</p>
+      <h2 id="sheet-title">${dateLabel(view.day)}</h2>
+      <p class="event-line">${event ? `イベント：${esc(event)}` : 'イベントなし'}</p>
+      <p class="total" data-win-rate><span class="label">勝率</span>
+        <span class="value num zero">${winRateText(s.won, s.judged)}</span>
+        <span class="sub num">${s.judged}台中${s.won}台プラス</span></p>
+      <p class="note">保存したアナスロのHTMLから数えた、この日の勝ち負けだけです。グラフの終点がゼロ線より上で終わった台をプラスとし、回っていない台・終わり方の分からない台は数えていません（この日の台 ${s.racks}台）。台ごとのデータはこのページにはありません。</p>`;
+    },
+    onRow: () => {},
+  });
+}
+
 app.addEventListener('click', (e) => {
-  const target = e.target.closest('[data-open], [data-store], [data-month], [data-idle-open], [data-variety-open], [data-suffix-open]');
+  const target = e.target.closest('[data-open], [data-summary-open], [data-store], [data-month], [data-idle-open], [data-variety-open], [data-suffix-open]');
   if (!target || !state.model) return;
   if (target.dataset.open) { openDay(target.dataset.open); return; }
+  if (target.dataset.summaryOpen) { openSummary(target.dataset.summaryOpen); return; }
   if (target.dataset.idleOpen != null) { openIdle(); return; }
   if (target.dataset.varietyOpen != null) { openVariety(); return; }
   if (target.dataset.suffixOpen != null) { openSuffix(); return; }
