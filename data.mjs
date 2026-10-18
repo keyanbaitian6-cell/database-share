@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=834715ce0ca8';
+import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=7ffa006b1977';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -199,6 +199,22 @@ export function calendarDay(racks, summary) {
   if (racks.length || !summary || summary.judged === 0) return {...dayNet(racks), summary: null};
   return {total: null, captured: 0, racks: summary.racks, judged: summary.judged, won: summary.won, winRate: true, summary};
 }
+
+/**
+ * 読み込みの失敗の理由（2026-10-18 利用者「最新を読み込んでも毎回一部の更新に失敗しましたと出る」。どの店が何で失敗したか
+ * 分からなかった）。Promise.allSettled の1件 r から短い文。成功なら ''。
+ */
+export function loadFailureReason(r) {
+  if (r.status === 'fulfilled') return r.value && !r.value.error ? '' : String(r.value?.error || '中身が空でした').slice(0, 80);
+  const e = r.reason;
+  if (e?.name === 'AbortError') return '時間切れ（30秒）';
+  if (e instanceof TypeError) return '通信できませんでした';
+  return String(e?.message || e || '不明なエラー').slice(0, 80);
+}
+
+/** [[店の名前, allSettled の1件], …] → 「メルヘン：時間切れ（30秒）、P-STATION：…」（失敗したものだけ）。 */
+export const loadFailureText = (entries) => entries.map(([label, r]) => [label, loadFailureReason(r)])
+  .filter(([, why]) => why).map(([label, why]) => `${label}：${why}`).join('、');
 
 /** その月の日（`2026-10-01`〜）。month は1〜12。 */
 export function monthDayList(year, month) {

@@ -5,8 +5,8 @@
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=834715ce0ca8';
-import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=834715ce0ca8';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=7ffa006b1977';
+import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=7ffa006b1977';
 import {
   MERUHEN_STORES, calendarDay, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
@@ -16,8 +16,8 @@ import {
   ROTATION_DAYS, byLongestGap, daysSinceRainbow, rackDays, rainbowVarietyMax, windowDays,
   SUFFIX_PERIODS, hasSuffixSummary, suffixesOf, zoromeEndingsOf, suffixLabel, suffixReport,
   varietyWeek, varietyMaxRacksFor, rainbowTodayRows,
-  monthDayList, periodWinRate, winRateYears, yearWinRates,
-} from './data.mjs?v=834715ce0ca8';
+  monthDayList, periodWinRate, winRateYears, yearWinRates, loadFailureText,
+} from './data.mjs?v=7ffa006b1977';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -84,11 +84,13 @@ async function load() {
       .map((q, i) => i < 2 ? fetchViewerDocument(base + q, i === 0 ? 'meruhen' : 'pscube', getJson) : getJson(base + q)));
   const doc = (r) => (r.status === 'fulfilled' && r.value && !r.value.error ? r.value : null);
   const m = doc(meruhen), p = doc(pscube);
+  // どの店が何で失敗したかを、知らせの文にそのまま出す（2026-10-18）。
+  const why = loadFailureText([['メルヘン', meruhen], ['P-STATION', pscube]]);
   if (loadingId !== state.id) return;
   if (!m && !p) {
     state.loading = false; reload.disabled = false;
     const reason = [meruhen, pscube].map(r => (r.status === 'rejected' ? r.reason?.message : r.value?.error)).find(Boolean);
-    if (state.model) { state.notice = '更新できませんでした。保存済みのデータを表示しています。'; render(); }
+    if (state.model) { state.notice = `更新できませんでした（${why}）。保存済みのデータを表示しています。`; render(); }
     else showSetup(`読み込めませんでした。リンクが正しいか、少し待ってからもう一度お試しください。${reason ? `（${reason}）` : ''}`);
     return;
   }
@@ -101,7 +103,7 @@ async function load() {
     if (p) await rememberViewerHistory(base, 'pscube', p, undefined, !p.history);
     await saveOfflineMetadata(state.id, metadata);
   } catch { state.notice = '端末への保存に失敗しました。空き容量とブラウザの保存設定を確認してください。'; }
-  state.notice ||= (!m || !p) ? '一部の更新に失敗しました。保存済みのデータを併用しています。' : '';
+  state.notice ||= (!m || !p) ? `一部の更新に失敗しました（${why}）。保存済みのデータを併用しています。` : '';
   const localM = m || await readViewerHistory(base, 'meruhen').catch(() => null);
   const localP = p || await readViewerHistory(base, 'pscube').catch(() => null);
   state.loading = false; reload.disabled = false;
