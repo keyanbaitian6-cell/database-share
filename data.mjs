@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=d977521e9a96';
+import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=834715ce0ca8';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -198,6 +198,47 @@ export function daySummaries(doc) {
 export function calendarDay(racks, summary) {
   if (racks.length || !summary || summary.judged === 0) return {...dayNet(racks), summary: null};
   return {total: null, captured: 0, racks: summary.racks, judged: summary.judged, won: summary.won, winRate: true, summary};
+}
+
+/** その月の日（`2026-10-01`〜）。month は1〜12。 */
+export function monthDayList(year, month) {
+  const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const ym = `${year}-${String(month).padStart(2, '0')}`;
+  return Array.from({length: last}, (_, i) => `${ym}-${String(i + 1).padStart(2, '0')}`);
+}
+
+/**
+ * 日の並び days の勝率（2026-10-18 利用者「月ごとに月間の勝率出すのと、年間でも見れるページ」）。日ごとにカレンダーと同じ元
+ * （台データ、無い日はHTMLの集計）の「勝ち負けの分かる台」「プラスの台」を足して割る（日の勝率の平均ではない）。
+ * days＝勝ち負けの分かる台が1台以上あった日の数。
+ */
+export function periodWinRate(byDay, summaries, store, days) {
+  let judged = 0, won = 0, counted = 0;
+  for (const day of days) {
+    const key = `${store}|${day}`;
+    const d = calendarDay(byDay.get(key) ?? [], summaries.get(key));
+    if (d.judged > 0) { judged += d.judged; won += d.won; counted++; }
+  }
+  return {judged, won, days: counted};
+}
+
+/** その年の月ごとの勝率（1〜12月）と年間。 */
+export function yearWinRates(byDay, summaries, store, year) {
+  const months = Array.from({length: 12}, (_, i) => ({month: i + 1, ...periodWinRate(byDay, summaries, store, monthDayList(year, i + 1))}));
+  const total = months.reduce((t, m) => ({judged: t.judged + m.judged, won: t.won + m.won, days: t.days + m.days}), {judged: 0, won: 0, days: 0});
+  return {months, total};
+}
+
+/** 勝率の出せる年（新しい順）。台データの日とHTMLの集計の日から。 */
+export function winRateYears(byDay, summaries, store) {
+  const years = new Set();
+  for (const map of [byDay, summaries]) {
+    for (const key of map.keys()) {
+      const [s, day] = key.split('|');
+      if (s === store) years.add(Number(day.slice(0, 4)));
+    }
+  }
+  return [...years].sort((a, b) => b - a);
 }
 
 /** その日の差枚TOP50（差枚の多い順）と強かった機種10選（1台あたりの平均回転数、2台以上の機種）。 */

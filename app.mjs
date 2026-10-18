@@ -5,8 +5,8 @@
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=d977521e9a96';
-import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=d977521e9a96';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=834715ce0ca8';
+import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=834715ce0ca8';
 import {
   MERUHEN_STORES, calendarDay, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
@@ -16,7 +16,8 @@ import {
   ROTATION_DAYS, byLongestGap, daysSinceRainbow, rackDays, rainbowVarietyMax, windowDays,
   SUFFIX_PERIODS, hasSuffixSummary, suffixesOf, zoromeEndingsOf, suffixLabel, suffixReport,
   varietyWeek, varietyMaxRacksFor, rainbowTodayRows,
-} from './data.mjs?v=d977521e9a96';
+  monthDayList, periodWinRate, winRateYears, yearWinRates,
+} from './data.mjs?v=834715ce0ca8';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -143,6 +144,8 @@ function render() {
   if (!model || !model.stores.length) return;
   const today = todayJst();
   const weeks = monthWeeks(state.year, state.month);
+  // 月間の勝率（2026-10-18 利用者「月ごとに月間の勝率出す」）：その月の日の台数を足して割る。
+  const monthRate = periodWinRate(model.byDay, model.summaries, state.store, monthDayList(state.year, state.month));
   const cells = weeks.flat().map(day => {
     if (!day) return '<div class="blank" aria-hidden="true"></div>';
     const racks = model.byDay.get(`${state.store}|${day}`) ?? [];
@@ -167,6 +170,7 @@ function render() {
     <section class="hero">
       <p class="kicker">${esc(storeLabel(state.store))}</p>
       <h1 class="headline num">${state.year}年${state.month}月</h1>
+      ${monthRate.judged ? `<p class="month-rate num" data-month-rate>月間の${winRateText(monthRate.won, monthRate.judged)}<span class="sub">${monthRate.days}日・${count(monthRate.judged)}台中${count(monthRate.won)}台プラス</span></p>` : ''}
       <p class="lede">日付を押すと、その日の差枚TOP50と強かった機種10選が見られます。</p>
     </section>
     <div class="stores">
@@ -179,6 +183,7 @@ function render() {
       <button type="button" class="pill pill-outline" data-idle-open>バラエティの回っていない台</button>
       ${Object.hasOwn(MERUHEN_STORES, state.store) ? `<button type="button" class="pill pill-outline" data-variety-open>バラエティ${RAINBOW}</button>` : ''}
       ${hasSuffixSummary(state.store) ? '<button type="button" class="pill pill-outline" data-suffix-open>末尾別データまとめ</button>' : ''}
+      <button type="button" class="pill pill-outline" data-year-open>月別・年間の勝率</button>
     </div>
     <div class="months">
       <button type="button" class="pill pill-outline" data-month="-1" aria-label="前の月">‹ 前の月</button>
@@ -300,6 +305,7 @@ function titleOfView(view) {
   if (view.kind === 'variety') return view.mode === 'week' ? 'バラエティの候補' : `バラエティ${RAINBOW}一覧`;
   if (view.kind === 'suffix') return '末尾別データまとめ';
   if (view.kind === 'suffixList') return `${suffixLabel(view.suffix)}の内訳`;
+  if (view.kind === 'year') return '月別・年間の勝率';
   return 'その日のまとめ';
 }
 
@@ -315,7 +321,18 @@ function openSheet({first, body, onRow, onChange, onAction}) {
   backdrop.className = 'sheet-backdrop';
   backdrop.innerHTML = '<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title"></div>';
   const sheet = backdrop.firstElementChild;
+  // 月別・年間の勝率は、日付の代わりに年を送る。
+  const yearBar = (view) => {
+    const years = winRateYears(state.model.byDay, state.model.summaries, state.store);
+    const index = years.indexOf(view.year);
+    return `<div class="date-bar">
+        <button type="button" class="pill pill-outline step" data-year-step="1" aria-label="前の年"${index < 0 || index >= years.length - 1 ? ' disabled' : ''}>‹</button>
+        <select data-sheet-year aria-label="表示する年">${options((years.includes(view.year) ? years : [view.year, ...years]).map(String), String(view.year), y => `${y}年`)}</select>
+        <button type="button" class="pill pill-outline step" data-year-step="-1" aria-label="次の年"${index <= 0 ? ' disabled' : ''}>›</button>
+      </div>`;
+  };
   const dateBar = (view) => {
+    if (view.kind === 'year') return yearBar(view);
     const days = daysOfView(view), day = dayOfView(view);
     const index = days.indexOf(day);
     return `<div class="date-bar">
@@ -370,6 +387,13 @@ function openSheet({first, body, onRow, onChange, onAction}) {
     if (e.target === backdrop || e.target.closest('[data-close]')) return close();
     if (e.target.closest('[data-back]')) return back();
     const view = views[views.length - 1];
+    const yearStep = e.target.closest('[data-year-step]');
+    if (yearStep) {
+      const years = winRateYears(state.model.byDay, state.model.summaries, state.store);
+      const next = years[years.indexOf(view.year) + Number(yearStep.dataset.yearStep)];
+      if (next) { view.year = next; view.scroll = 0; render(); }
+      return;
+    }
     const step = e.target.closest('[data-day-step]');
     if (step) {
       const days = daysOfView(view);
@@ -412,6 +436,7 @@ function openSheet({first, body, onRow, onChange, onAction}) {
     if (!e.target.matches('select')) return;
     const view = views[views.length - 1];
     if (e.target.matches('[data-sheet-day]')) { changeDay(view, e.target.value); return; }
+    if (e.target.matches('[data-sheet-year]')) { view.year = Number(e.target.value); view.scroll = 0; render(); return; }
     if (!onChange) return;
     onChange(e.target, view);
     view.scroll = sheet.scrollTop;
@@ -937,14 +962,50 @@ function openSummary(first) {
   });
 }
 
+/**
+ * 月別・年間の勝率（2026-10-18 利用者「月ごとに月間の勝率出すのと、年間でも見れるページつくっておいてね」）。
+ * 年の勝率と、1〜12月の勝率（勝ち負けの分かる日がある月だけ）。月を押すと、その月のカレンダーへ。
+ */
+function openYear() {
+  openSheet({
+    first: {kind: 'year', year: state.year},
+    body: (view) => {
+      const {months, total} = yearWinRates(state.model.byDay, state.model.summaries, state.store, view.year);
+      const shown = months.filter(m => m.judged > 0);
+      return `
+      <p class="store">${esc(storeLabel(state.store))}</p>
+      <h2 id="sheet-title">${view.year}年</h2>
+      ${total.judged ? `<p class="total" data-year-total><span class="label">年間の勝率</span>
+        <span class="value num zero">${winRateText(total.won, total.judged)}</span>
+        <span class="sub num">${total.days}日・${count(total.judged)}台中${count(total.won)}台プラス</span></p>` : '<p class="note">この年は勝ち負けの分かる日がありません。</p>'}
+      ${shown.length ? `<h3>月別</h3>
+      <p class="caption">月を押すと、その月のカレンダーが見られます。</p>
+      ${tapList(shown.map(m => ({
+        lead: '', attrs: `data-month-jump="${m.month}"`,
+        main: `<span class="machine num" style="display:block">${m.month}月</span><span class="rack num">${m.days}日・${count(m.judged)}台中${count(m.won)}台プラス</span>`,
+        right: `<span class="value num zero" style="display:block">${winRateText(m.won, m.judged)}</span>`,
+      })))}` : ''}
+      <p class="note">勝率＝プラスで終わった台の割合。台のデータがある日はその日の台から、無い日は保存したアナスロのHTMLから数えます（回っていない台・終わり方の分からない台は数えません）。月・年の勝率は、日ごとの台数を足して割ったものです。</p>`;
+    },
+    onRow: (row, push, view) => {
+      if (row.dataset.monthJump == null) return;
+      state.year = view.year;
+      state.month = Number(row.dataset.monthJump);
+      row.closest('.sheet-backdrop').querySelector('[data-close]').click();
+      render();
+    },
+  });
+}
+
 app.addEventListener('click', (e) => {
-  const target = e.target.closest('[data-open], [data-summary-open], [data-store], [data-month], [data-idle-open], [data-variety-open], [data-suffix-open]');
+  const target = e.target.closest('[data-open], [data-summary-open], [data-store], [data-month], [data-idle-open], [data-variety-open], [data-suffix-open], [data-year-open]');
   if (!target || !state.model) return;
   if (target.dataset.open) { openDay(target.dataset.open); return; }
   if (target.dataset.summaryOpen) { openSummary(target.dataset.summaryOpen); return; }
   if (target.dataset.idleOpen != null) { openIdle(); return; }
   if (target.dataset.varietyOpen != null) { openVariety(); return; }
   if (target.dataset.suffixOpen != null) { openSuffix(); return; }
+  if (target.dataset.yearOpen != null) { openYear(); return; }
   if (target.dataset.store) {
     state.store = target.dataset.store;
     store.set(STORE_KEY, state.store);
