@@ -5,8 +5,8 @@
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=7ffa006b1977';
-import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=7ffa006b1977';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=3251a084e8f4';
+import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=3251a084e8f4';
 import {
   MERUHEN_STORES, calendarDay, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
@@ -17,7 +17,7 @@ import {
   SUFFIX_PERIODS, hasSuffixSummary, suffixesOf, zoromeEndingsOf, suffixLabel, suffixReport,
   varietyWeek, varietyMaxRacksFor, rainbowTodayRows,
   monthDayList, periodWinRate, winRateYears, yearWinRates, loadFailureText,
-} from './data.mjs?v=7ffa006b1977';
+} from './data.mjs?v=3251a084e8f4';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
