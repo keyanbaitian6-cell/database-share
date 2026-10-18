@@ -5,8 +5,8 @@
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=3251a084e8f4';
-import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=3251a084e8f4';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=7da60ee5b549';
+import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=7da60ee5b549';
 import {
   MERUHEN_STORES, calendarDay, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
@@ -17,7 +17,8 @@ import {
   SUFFIX_PERIODS, hasSuffixSummary, suffixesOf, zoromeEndingsOf, suffixLabel, suffixReport,
   varietyWeek, varietyMaxRacksFor, rainbowTodayRows,
   monthDayList, periodWinRate, winRateYears, yearWinRates, loadFailureText,
-} from './data.mjs?v=3251a084e8f4';
+  characterBirthdayCellLabel, characterBirthdaysOn, parseCharacterBirthdays,
+} from './data.mjs?v=7da60ee5b549';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -34,7 +35,8 @@ const TIMEOUT_MS = 30000;
 
 const app = document.getElementById('app');
 const reload = document.getElementById('reload');
-const state = {id: null, name: null, model: null, store: null, year: 0, month: 0, loading: false, notice: ''};
+const state = {id: null, name: null, model: null, store: null, year: 0, month: 0, loading: false, notice: '',
+  birthdays: new Map()};
 
 const esc = (s) => String(s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'})[c]);
 const tone = (n) => (n > 0 ? 'plus' : n < 0 ? 'minus' : 'zero');
@@ -65,6 +67,26 @@ async function getJson(url) {
     if (attempt < RETRY_MS.length) await new Promise(r => setTimeout(r, RETRY_MS[attempt]));
   }
   throw last;
+}
+
+/**
+ * キャラ誕生日（EVENT_CALENDAR.md「キャラ誕生日」）。ページと一緒に置くファイルで、公開のとき
+ * database_android/assets/character_birthdays.json から作る（tool/stage_share_viewer.py）。読めなくても誕生日を出さないだけ。
+ */
+async function loadBirthdays() {
+  try {
+    const response = await fetch('./character_birthdays.json?v=7da60ee5b549', {credentials: 'omit'});
+    if (!response.ok) return;
+    state.birthdays = parseCharacterBirthdays(await response.json());
+    if (state.model) render();
+  } catch { /* 誕生日が読めなくてもカレンダーは使える */ }
+}
+
+/** その日のキャラ誕生日の一覧（日付を押した先に出す）。無ければ ''。 */
+function birthdayLines(day) {
+  const list = characterBirthdaysOn(state.birthdays, day);
+  return list.length ? `<div class="birthday-line" data-birthdays><p class="label">キャラ誕生日（イベントとは別）</p>
+        ${list.map(b => `<p class="birthday-name">🎂 ${esc(b.label)}</p>`).join('')}</div>` : '';
 }
 
 async function load() {
@@ -154,18 +176,23 @@ function render() {
     // 台データの無い日は、保存したHTMLからの「何台中何台プラス」（day_summaries）で勝率を出す。
     const net = calendarDay(racks, model.summaries.get(`${state.store}|${day}`));
     const event = eventLabel(model.events.get(`${state.store}|${day}`));
+    const birthdays = characterBirthdaysOn(state.birthdays, day);
+    const cake = characterBirthdayCellLabel(birthdays.map(b => b.name));
     const date = Number(day.slice(8));
     const rate = net.winRate ? winRateText(net.won, net.judged) : '';
-    const label = [`${state.month}月${date}日`, event,
+    const label = [`${state.month}月${date}日`, event, birthdays.length ? `キャラ誕生日 ${birthdays.map(b => b.label).join('、')}` : '',
       rate ? `${net.judged}台中${net.won}台プラス、${rate}` : net.total != null ? `総差枚 ${signed(net.total)}` : ''].filter(Boolean).join('、');
     const inner = `<span class="date num">${date}</span>`
       + (event ? `<span class="event">${esc(event)}</span>` : '')
+      + (cake ? `<span class="birthday">${esc(cake)}</span>` : '')
       + (rate ? `<span class="net num zero">${rate}</span>`
         : net.total != null ? `<span class="net num ${tone(net.total)}">${compactSigned(net.total)}</span>` : '');
     const cls = `day${day === today.day ? ' today' : ''}`;
     return racks.length
       ? `<button type="button" class="${cls}" data-open="${day}" aria-label="${esc(label)}">${inner}</button>`
       : net.summary ? `<button type="button" class="${cls}" data-summary-open="${day}" aria-label="${esc(label)}">${inner}</button>`
+      // 台もHTMLの集計も無い日でも、誕生日があれば押して全員（名前（作品））を見られる。
+      : birthdays.length ? `<button type="button" class="${cls}" data-birthday-open="${day}" aria-label="${esc(label)}">${inner}</button>`
       : `<div class="${cls}" aria-label="${esc(label)}">${inner}</div>`;
   }).join('');
   app.innerHTML = `
@@ -198,7 +225,7 @@ function render() {
         <div class="grid">${cells}</div>
       </div>
       ${state.notice ? `<p class="legend" role="status">${esc(state.notice)}</p>` : ''}
-      <p class="legend">${esc(exportedText(model.exportedAt))}${model.exportedAt ? '。' : ''}差枚＝その日の総差枚（メルヘンは推定）。差枚の分かる台が半分に満たない日（アナスロ補完の日など）は勝率＝プラスで終わった台の割合（グラフの終点で判定）。台のデータが無い日の勝率は、保存したアナスロのHTMLから数えたもの（押すと何台中何台プラスか）。＊＝前日までに入力した記録がないイベント。</p>
+      <p class="legend">${esc(exportedText(model.exportedAt))}${model.exportedAt ? '。' : ''}差枚＝その日の総差枚（メルヘンは推定）。🎂＝キャラ誕生日（イベントとは別。押すと全員を「名前（作品）」で見られる）。差枚の分かる台が半分に満たない日（アナスロ補完の日など）は勝率＝プラスで終わった台の割合（グラフの終点で判定）。台のデータが無い日の勝率は、保存したアナスロのHTMLから数えたもの（押すと何台中何台プラスか）。＊＝前日までに入力した記録がないイベント。</p>
     </section>`;
 }
 
@@ -280,6 +307,7 @@ function daysOfView(view) {
     return storeDays(byDay, r.store).filter(d => has(r.store, d, x => x.machine === r.machine && x.rack === r.rack));
   }
   if (view.kind === 'summary') return summaryDays(state.store);
+  if (view.kind === 'birthday') return [view.day];
   const all = storeDays(byDay, state.store);
   if (view.kind === 'machine') return all.filter(d => has(state.store, d, x => x.machine === view.machine));
   return all;
@@ -308,6 +336,7 @@ function titleOfView(view) {
   if (view.kind === 'suffix') return '末尾別データまとめ';
   if (view.kind === 'suffixList') return `${suffixLabel(view.suffix)}の内訳`;
   if (view.kind === 'year') return '月別・年間の勝率';
+  if (view.kind === 'birthday') return 'キャラ誕生日';
   return 'その日のまとめ';
 }
 
@@ -477,6 +506,7 @@ function openDay(first) {
       <p class="store">${esc(storeLabel(state.store))}</p>
       <h2 id="sheet-title">${dateLabel(view.day)}</h2>
       <p class="event-line">${event ? `イベント：${esc(event)}` : 'イベントなし'}</p>
+      ${birthdayLines(view.day)}
       ${net.total != null ? `<p class="total"><span class="label">総${netName}</span>
         <span class="value num ${tone(net.total)}">${signed(net.total)}</span>
         <span class="sub num">${netName}がわかった台 ${net.captured}/${net.racks}台</span></p>` : ''}
@@ -955,10 +985,29 @@ function openSummary(first) {
       <p class="store">${esc(storeLabel(state.store))}</p>
       <h2 id="sheet-title">${dateLabel(view.day)}</h2>
       <p class="event-line">${event ? `イベント：${esc(event)}` : 'イベントなし'}</p>
+      ${birthdayLines(view.day)}
       <p class="total" data-win-rate><span class="label">勝率</span>
         <span class="value num zero">${winRateText(s.won, s.judged)}</span>
         <span class="sub num">${s.judged}台中${s.won}台プラス</span></p>
       <p class="note">保存したアナスロのHTMLから数えた、この日の勝ち負けだけです。グラフの終点がゼロ線より上で終わった台をプラスとし、回っていない台・終わり方の分からない台は数えていません（この日の台 ${s.racks}台）。台ごとのデータはこのページにはありません。</p>`;
+    },
+    onRow: () => {},
+  });
+}
+
+/** 台もHTMLの集計も無い日の、キャラ誕生日だけのシート。 */
+function openBirthdays(first) {
+  if (!characterBirthdaysOn(state.birthdays, first).length) return;
+  openSheet({
+    first: {kind: 'birthday', day: first},
+    body: (view) => {
+      const event = eventLabel(state.model.events.get(`${state.store}|${view.day}`));
+      return `
+      <p class="store">${esc(storeLabel(state.store))}</p>
+      <h2 id="sheet-title">${dateLabel(view.day)}</h2>
+      <p class="event-line">${event ? `イベント：${esc(event)}` : 'イベントなし'}</p>
+      ${birthdayLines(view.day)}
+      <p class="note">この日は台のデータがありません。</p>`;
     },
     onRow: () => {},
   });
@@ -1000,10 +1049,11 @@ function openYear() {
 }
 
 app.addEventListener('click', (e) => {
-  const target = e.target.closest('[data-open], [data-summary-open], [data-store], [data-month], [data-idle-open], [data-variety-open], [data-suffix-open], [data-year-open]');
+  const target = e.target.closest('[data-open], [data-summary-open], [data-birthday-open], [data-store], [data-month], [data-idle-open], [data-variety-open], [data-suffix-open], [data-year-open]');
   if (!target || !state.model) return;
   if (target.dataset.open) { openDay(target.dataset.open); return; }
   if (target.dataset.summaryOpen) { openSummary(target.dataset.summaryOpen); return; }
+  if (target.dataset.birthdayOpen) { openBirthdays(target.dataset.birthdayOpen); return; }
   if (target.dataset.idleOpen != null) { openIdle(); return; }
   if (target.dataset.varietyOpen != null) { openVariety(); return; }
   if (target.dataset.suffixOpen != null) { openSuffix(); return; }
@@ -1043,4 +1093,5 @@ function start() {
 }
 
 prepareOffline().catch(() => { /* オフライン用ファイルの取得失敗は次回オンライン起動で再試行。 */ });
+loadBirthdays();
 start();

@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=3251a084e8f4';
+import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=7da60ee5b549';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -737,4 +737,59 @@ export function suffixReport(byDay, store, day, days = 1) {
     racks: plain.reduce((n, s) => n + s.racks, 0),
     days: new Set(summaries.flatMap(s => s.entries.map(r => r.day))).size,
   };
+}
+
+// キャラ誕生日（EVENT_CALENDAR.md「キャラ誕生日」、2026-10-18 利用者「足してほしかった」）。
+// PC `event_calendar.load_character_birthdays`・Flutter `character_birthdays.dart` と同じ規則：実在する月日だけ、
+// 同じ名前・作品は1つ、名前順。一覧は「名前（作品）」、うるう年でない年は2/29生まれを3/1に「（作品、2/29生まれ）」で出す。
+export const birthdayKey = (month, day) => `${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+/** 誕生日一覧（character_birthdays.json の中身）を月日（mm-dd）ごとに読む。形が違えば空。 */
+export function parseCharacterBirthdays(doc) {
+  const found = new Map();
+  if (!doc || typeof doc !== 'object' || !Array.isArray(doc.entries)) return found;
+  for (const raw of doc.entries) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const {month, day, name} = raw;
+    if (!Number.isInteger(month) || !Number.isInteger(day) || typeof name !== 'string') continue;
+    // 実在する月日だけ（うるう年の2024年で確かめるので2/29も入る）。
+    const date = new Date(Date.UTC(2024, month - 1, day));
+    if (date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) continue;
+    const trimmed = name.trim();
+    if (!trimmed) continue;
+    const work = typeof raw.work === 'string' ? raw.work.trim() : '';
+    const key = birthdayKey(month, day);
+    const list = found.get(key) ?? [];
+    if (!list.some(b => b.name === trimmed && b.work === work)) list.push({name: trimmed, work});
+    found.set(key, list);
+  }
+  const order = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+  for (const list of found.values()) list.sort((a, b) => order(a.name, b.name) || order(a.work, b.work));
+  return found;
+}
+
+/** 一覧に出す「名前（作品）」。[note] は作品の後ろに「、」で足す（2/29生まれなど）。 */
+export function characterBirthdayLabel(name, work, note = '') {
+  const inside = [work, note].filter(Boolean).join('、');
+  return inside ? `${name}（${inside}）` : name;
+}
+
+/** その日（yyyy-mm-dd）のキャラ誕生日 [{name, label}]。 */
+export function characterBirthdaysOn(birthdays, day) {
+  const [y, m, d] = day.split('-').map(Number);
+  const shown = (birthdays.get(birthdayKey(m, d)) ?? []).map(b => ({name: b.name, label: characterBirthdayLabel(b.name, b.work)}));
+  const leapYear = new Date(Date.UTC(y, 1, 29)).getUTCMonth() === 1;
+  if (m === 3 && d === 1 && !leapYear) {
+    for (const b of birthdays.get(birthdayKey(2, 29)) ?? []) {
+      shown.push({name: b.name, label: characterBirthdayLabel(b.name, b.work, '2/29生まれ')});
+    }
+  }
+  return shown;
+}
+
+/** マスに出す「🎂 名前2人＋ほか○名」（閲覧ページ・Androidのマスと同じ）。 */
+export function characterBirthdayCellLabel(names) {
+  if (!names.length) return '';
+  const more = names.length > 2 ? ` ほか${names.length - 2}名` : '';
+  return `🎂 ${names.slice(0, 2).join('・')}${more}`;
 }
