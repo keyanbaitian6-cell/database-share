@@ -1,4 +1,4 @@
-import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=525b39a9a00a';
+import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=320ece4acd51';
 // 閲覧専用の共有ページ（お試し、2026-10-09。EVENT_CALENDAR.md「閲覧専用の共有ページ」）。
 // 読むだけのApps Script（database_android/tool/viewer_drive_script_readonly.gs）からDriveのファイルを読み、
 // イベントカレンダー（各日のイベント・総差枚）と、日付を押したときの差枚TOP50（11位からは折りたたみ）・強かった機種10選、
@@ -6,8 +6,8 @@ import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, histor
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=525b39a9a00a';
-import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=525b39a9a00a';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=320ece4acd51';
+import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=320ece4acd51';
 import {
   MERUHEN_STORES, calendarDay, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
@@ -19,7 +19,7 @@ import {
   varietyWeek, varietyMaxRacksFor, rainbowTodayRows,
   monthDayList, periodWinRate, winRateYears, yearWinRates, loadFailureText,
   characterBirthdayCellLabel, characterBirthdaysOn, parseCharacterBirthdays,
-} from './data.mjs?v=525b39a9a00a';
+} from './data.mjs?v=320ece4acd51';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -79,7 +79,7 @@ async function getJson(url) {
  */
 async function loadBirthdays() {
   try {
-    const response = await fetch('./character_birthdays.json?v=525b39a9a00a', {credentials: 'omit'});
+    const response = await fetch('./character_birthdays.json?v=320ece4acd51', {credentials: 'omit'});
     if (!response.ok) return;
     state.birthdays = parseCharacterBirthdays(await response.json());
     if (state.model) render();
@@ -515,13 +515,25 @@ function localHistoryEdits(id=state.id) {
   return cells;
 }
 
+function historyEditIsAhead(cell, now=Date.now()) {
+  if(typeof cell?.updated_at!=='string') return false;
+  // Safariでも読めるよう、小数秒をミリ秒3桁へそろえる。
+  const editMs=Date.parse(cell.updated_at.replace(/\.(\d{1,6})(?=Z|[+-])/,(_,s)=>'.'+s.padEnd(3,'0').slice(0,3)));
+  return editMs>now+5*60*1000;
+}
+
 function queueHistoryEdit(field) {
   try {
     if(!state.historyDocument?.shared_editing) throw Error('共有用Apps Scriptを更新してから読み込み直してください。');
     const local=localHistoryEdits();
-    const doc=mergeHistoryCells(state.historyDocument,local,{strict:false});
     const fields=JSON.parse(decodeURIComponent(field.dataset.historyEdit));
-    const cell=newHistoryCell(doc,fields,field.value);
+    const key=historyEditKey({...fields,store:state.historyDocument.base.store}), now=Date.now();
+    // 自分の未送信を選び直すとき、誤った未来時刻を新しい編集へ引き継がない。
+    // 共有済みの編集と、正常な時刻で送信中の編集は従来どおり比較する。
+    const clockEdits=local.filter(c=>!(c?.pending===true && historyEditKey(c)===key && historyEditIsAhead(c,now)));
+    const doc=mergeHistoryCells(state.historyDocument,clockEdits,{strict:false});
+    const cell=newHistoryCell(doc,fields,field.value,now);
+    if(historyEditIsAhead(cell,now)) throw Error('共有済みの編集時刻が未来のため保存できません。共有元の端末の日時を確認してください。');
     const next=local.filter(c=>historyEditKey(c)!==historyEditKey(cell));
     next.push({...cell,pending:true});
     if(next.length>30000) throw Error('端末の履歴の保存件数が上限に達しています。');
@@ -548,9 +560,7 @@ async function flushHistoryEdits() {
         try {
           const cell=historyCell(c,model);
           // 進んだ時計で作った分も、日時修正後の正常な編集を止めず端末へ残す。
-          // Safariでも読めるよう、小数秒をミリ秒3桁へそろえてから上限だけ比較する。
-          const editMs=Date.parse(cell.updated_at.replace(/\.(\d{1,6})(?=Z|[+-])/,(_,s)=>'.'+s.padEnd(3,'0').slice(0,3)));
-          if(editMs>Date.now()+5*60*1000) { blocked++;continue; }
+          if(historyEditIsAhead(cell)) { blocked++;continue; }
           if(cells.length<100) { cells.push(cell);batch.push(c); }
         } catch { blocked++; }
       }
@@ -568,20 +578,24 @@ async function flushHistoryEdits() {
         });
         if(!response.ok) throw Error(`HTTP ${response.status}`);
         answer=await response.json();
-        if(!answer.ok || !answer.history) throw Error(answer.error||'保存に対応したApps Scriptへ更新してください。');
+        if(!answer.ok || !answer.history) throw Error((answer.error||'保存に対応したApps Scriptへ更新してください。')+'「最新を読む」後に再送してください。');
         parsePrivateHistory(answer.history);
       } finally { clearTimeout(timer); }
       const sent=new Map(batch.map(c=>[historyEditKey(c),c.updated_at]));
       const local=localHistoryEdits(id).map(c=>sent.get(historyEditKey(c))===c.updated_at?{...c,pending:false}:c);
-      localStorage.setItem(HISTORY_LOCAL_KEY+id,JSON.stringify(local));
+      let acknowledged=true;
+      try { localStorage.setItem(HISTORY_LOCAL_KEY+id,JSON.stringify(local)); }
+      catch { acknowledged=false; /* 共有保存は成功済み。端末に残った未送信の原文は消さない。 */ }
       if(id!==state.id) break;
       state.historyDocument=answer.history;
       state.eventHistory=parsePrivateHistory(mergeHistoryCells(answer.history,local,{strict:false}));
       const remaining=local.filter(c=>c.pending===true).length;
-      state.historySaveNotice=remaining?`端末に保存しました。残り${count(remaining)}件を共有へ送信中です。`:
+      state.historySaveNotice=!acknowledged?'共有に保存しました。端末の送信済み状態を更新できませんでした。再読み込み時は再送します。':
+        remaining?`端末に保存しました。残り${count(remaining)}件を共有へ送信中です。`:
         answer.keptNewer?'ほかの端末の新しい結果を表示しています。':'共有に保存しました。';
       // この端末の編集は上の保存済み一覧に残る。ほかの共有設定のキャッシュを上書きしない。
       state.historyRedraw?.();
+      if(!acknowledged) break;
     }
   } catch(error) {
     if(id===state.id) {
