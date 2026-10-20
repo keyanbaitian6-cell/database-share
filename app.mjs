@@ -1,4 +1,4 @@
-import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=cc4e7fdd7b04';
+import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=525b39a9a00a';
 // 閲覧専用の共有ページ（お試し、2026-10-09。EVENT_CALENDAR.md「閲覧専用の共有ページ」）。
 // 読むだけのApps Script（database_android/tool/viewer_drive_script_readonly.gs）からDriveのファイルを読み、
 // イベントカレンダー（各日のイベント・総差枚）と、日付を押したときの差枚TOP50（11位からは折りたたみ）・強かった機種10選、
@@ -6,8 +6,8 @@ import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, histor
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=cc4e7fdd7b04';
-import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=cc4e7fdd7b04';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=525b39a9a00a';
+import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=525b39a9a00a';
 import {
   MERUHEN_STORES, calendarDay, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
@@ -19,7 +19,7 @@ import {
   varietyWeek, varietyMaxRacksFor, rainbowTodayRows,
   monthDayList, periodWinRate, winRateYears, yearWinRates, loadFailureText,
   characterBirthdayCellLabel, characterBirthdaysOn, parseCharacterBirthdays,
-} from './data.mjs?v=cc4e7fdd7b04';
+} from './data.mjs?v=525b39a9a00a';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -79,7 +79,7 @@ async function getJson(url) {
  */
 async function loadBirthdays() {
   try {
-    const response = await fetch('./character_birthdays.json?v=cc4e7fdd7b04', {credentials: 'omit'});
+    const response = await fetch('./character_birthdays.json?v=525b39a9a00a', {credentials: 'omit'});
     if (!response.ok) return;
     state.birthdays = parseCharacterBirthdays(await response.json());
     if (state.model) render();
@@ -483,6 +483,13 @@ function openSheet({first, body, onRow, onChange, onAction}) {
     const row = e.target.closest('button.row, button.row-link');
     if (row) onRow(row, push, view);
   });
+  function redrawKeepingPosition() {
+    if(!backdrop.isConnected) return;
+    const lefts=[...sheet.querySelectorAll('.history-overflow')].map(e=>e.scrollLeft);
+    views[views.length-1].scroll=sheet.scrollTop;
+    render();
+    sheet.querySelectorAll('.history-overflow').forEach((e,i)=>e.scrollLeft=lefts[i]??0);
+  }
   backdrop.addEventListener('change', (e) => {
     if (!e.target.matches('select')) return;
     const view = views[views.length - 1];
@@ -490,20 +497,13 @@ function openSheet({first, body, onRow, onChange, onAction}) {
     if (e.target.matches('[data-sheet-year]')) { view.year = Number(e.target.value); view.scroll = 0; render(); return; }
     if (!onChange) return;
     onChange(e.target, view);
-    view.scroll = sheet.scrollTop;
-    render();
+    redrawKeepingPosition();
   });
   document.addEventListener('keydown', onKey);
   document.body.style.overflow = 'hidden';
   document.body.append(backdrop);
   render();
-  return () => {
-    if(!backdrop.isConnected) return;
-    const lefts=[...sheet.querySelectorAll('.history-overflow')].map(e=>e.scrollLeft);
-    views[views.length-1].scroll=sheet.scrollTop;
-    render();
-    sheet.querySelectorAll('.history-overflow').forEach((e,i)=>e.scrollLeft=lefts[i]??0);
-  };
+  return redrawKeepingPosition;
 }
 
 /** 送信済みの編集も残す。遅れて返ったGETやPC出力で新しい表示を巻き戻さない。 */
@@ -539,10 +539,26 @@ async function flushHistoryEdits() {
   try {
     while(true) {
       if(id!==state.id) break;
-      const batch=localHistoryEdits(id).filter(c=>c.pending===true).slice(0,100);
-      if(!batch.length) break;
+      const pending=localHistoryEdits(id).filter(c=>c?.pending===true);
+      if(!pending.length) break;
       const model=parsePrivateHistory(state.historyDocument);
-      const cells=batch.map(c=>historyCell(c,model));
+      const cells=[], batch=[];
+      let blocked=0;
+      for(const c of pending) {
+        try {
+          const cell=historyCell(c,model);
+          // 進んだ時計で作った分も、日時修正後の正常な編集を止めず端末へ残す。
+          // Safariでも読めるよう、小数秒をミリ秒3桁へそろえてから上限だけ比較する。
+          const editMs=Date.parse(cell.updated_at.replace(/\.(\d{1,6})(?=Z|[+-])/,(_,s)=>'.'+s.padEnd(3,'0').slice(0,3)));
+          if(editMs>Date.now()+5*60*1000) { blocked++;continue; }
+          if(cells.length<100) { cells.push(cell);batch.push(c); }
+        } catch { blocked++; }
+      }
+      if(!cells.length) {
+        state.historySaveNotice=`送信できない編集${count(blocked)}件は端末に残しています。現在の週表と端末の日時を確認し、「最新を読む」後に再送してください。`;
+        state.historyRedraw?.();
+        break;
+      }
       const abort=new AbortController(), timer=setTimeout(()=>abort.abort(),TIMEOUT_MS);
       let answer;
       try {
