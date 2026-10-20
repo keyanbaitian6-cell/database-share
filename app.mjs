@@ -1,4 +1,4 @@
-import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName} from './event_history.mjs?v=4a9874df7a03';
+import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=cc4e7fdd7b04';
 // 閲覧専用の共有ページ（お試し、2026-10-09。EVENT_CALENDAR.md「閲覧専用の共有ページ」）。
 // 読むだけのApps Script（database_android/tool/viewer_drive_script_readonly.gs）からDriveのファイルを読み、
 // イベントカレンダー（各日のイベント・総差枚）と、日付を押したときの差枚TOP50（11位からは折りたたみ）・強かった機種10選、
@@ -6,8 +6,8 @@ import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName} from '
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=4a9874df7a03';
-import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=4a9874df7a03';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=cc4e7fdd7b04';
+import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=cc4e7fdd7b04';
 import {
   MERUHEN_STORES, calendarDay, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
@@ -19,7 +19,7 @@ import {
   varietyWeek, varietyMaxRacksFor, rainbowTodayRows,
   monthDayList, periodWinRate, winRateYears, yearWinRates, loadFailureText,
   characterBirthdayCellLabel, characterBirthdaysOn, parseCharacterBirthdays,
-} from './data.mjs?v=4a9874df7a03';
+} from './data.mjs?v=cc4e7fdd7b04';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -37,7 +37,9 @@ const TIMEOUT_MS = 30000;
 const app = document.getElementById('app');
 const reload = document.getElementById('reload');
 const state = {id: null, name: null, model: null, store: null, year: 0, month: 0, loading: false, notice: '',
-  birthdays: new Map(), eventHistory: null, historyNotice: ''};
+  birthdays: new Map(), eventHistory: null, historyNotice: '', historyDocument:null, historyRedraw:null, historySaveNotice:''};
+const HISTORY_LOCAL_KEY='database-share-history-edits:';
+const historySending=new Set();
 
 const esc = (s) => String(s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'})[c]);
 const machineKey = (s) => String(s ?? '').replaceAll('+', ' ').replace(/\s+/g, ' ').trim();
@@ -77,7 +79,7 @@ async function getJson(url) {
  */
 async function loadBirthdays() {
   try {
-    const response = await fetch('./character_birthdays.json?v=4a9874df7a03', {credentials: 'omit'});
+    const response = await fetch('./character_birthdays.json?v=cc4e7fdd7b04', {credentials: 'omit'});
     if (!response.ok) return;
     state.birthdays = parseCharacterBirthdays(await response.json());
     if (state.model) render();
@@ -137,12 +139,14 @@ async function load() {
   const localP = p || await readViewerHistory(base, 'pscube').catch(() => null);
   state.loading = false; reload.disabled = false;
   showDocuments(localM, localP, metadata);
+  flushHistoryEdits();
 }
 
 function showDocuments(m, p, metadata = {}) {
   state.eventHistory = null;
+  state.historyDocument = metadata.eventHistory??null;
   try {
-    if (metadata.eventHistory) state.eventHistory = parsePrivateHistory(metadata.eventHistory);
+    if (metadata.eventHistory) state.eventHistory = parsePrivateHistory(mergeHistoryCells(metadata.eventHistory,localHistoryEdits(),{strict:false}));
   } catch (error) { state.historyNotice = `履歴ファイルを読めません：${error.message}`; }
   const records = [...meruhenRecords(m), ...pscubeRecords(p)];
   const byDay = indexRecords(records);
@@ -432,6 +436,7 @@ function openSheet({first, body, onRow, onChange, onAction}) {
   backdrop.addEventListener('click', (e) => {
     if (e.target === backdrop || e.target.closest('[data-close]')) return close();
     if (e.target.closest('[data-back]')) return back();
+    if(e.target.closest('[data-history-retry]')) { flushHistoryEdits(); return; }
     const view = views[views.length - 1];
     const yearStep = e.target.closest('[data-year-step]');
     if (yearStep) {
@@ -492,6 +497,82 @@ function openSheet({first, body, onRow, onChange, onAction}) {
   document.body.style.overflow = 'hidden';
   document.body.append(backdrop);
   render();
+  return () => {
+    if(!backdrop.isConnected) return;
+    const lefts=[...sheet.querySelectorAll('.history-overflow')].map(e=>e.scrollLeft);
+    views[views.length-1].scroll=sheet.scrollTop;
+    render();
+    sheet.querySelectorAll('.history-overflow').forEach((e,i)=>e.scrollLeft=lefts[i]??0);
+  };
+}
+
+/** 送信済みの編集も残す。遅れて返ったGETやPC出力で新しい表示を巻き戻さない。 */
+function localHistoryEdits(id=state.id) {
+  const raw=store.get(HISTORY_LOCAL_KEY+id);
+  if(raw==null) return [];
+  const cells=JSON.parse(raw);
+  if(!Array.isArray(cells) || cells.length>30000) throw Error('端末の履歴を読めません。保存済みの内容は残しています。');
+  return cells;
+}
+
+function queueHistoryEdit(field) {
+  try {
+    if(!state.historyDocument?.shared_editing) throw Error('共有用Apps Scriptを更新してから読み込み直してください。');
+    const local=localHistoryEdits();
+    const doc=mergeHistoryCells(state.historyDocument,local,{strict:false});
+    const fields=JSON.parse(decodeURIComponent(field.dataset.historyEdit));
+    const cell=newHistoryCell(doc,fields,field.value);
+    const next=local.filter(c=>historyEditKey(c)!==historyEditKey(cell));
+    next.push({...cell,pending:true});
+    if(next.length>30000) throw Error('端末の履歴の保存件数が上限に達しています。');
+    localStorage.setItem(HISTORY_LOCAL_KEY+state.id,JSON.stringify(next));
+    state.eventHistory=parsePrivateHistory(mergeHistoryCells(state.historyDocument,next,{strict:false}));
+    state.historySaveNotice='端末に保存しました。共有へ送信中です。';
+    flushHistoryEdits();
+  } catch(error) { toast(`記号を保存できません：${error.message}`); }
+}
+
+async function flushHistoryEdits() {
+  const id=state.id;
+  if(!id || !state.historyDocument?.shared_editing || historySending.has(id)) return;
+  historySending.add(id);
+  try {
+    while(true) {
+      if(id!==state.id) break;
+      const batch=localHistoryEdits(id).filter(c=>c.pending===true).slice(0,100);
+      if(!batch.length) break;
+      const model=parsePrivateHistory(state.historyDocument);
+      const cells=batch.map(c=>historyCell(c,model));
+      const abort=new AbortController(), timer=setTimeout(()=>abort.abort(),TIMEOUT_MS);
+      let answer;
+      try {
+        const response=await fetch(`https://script.google.com/macros/s/${id}/exec`,{
+          method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},signal:abort.signal,
+          body:JSON.stringify({file:'event-history',cells}),
+        });
+        if(!response.ok) throw Error(`HTTP ${response.status}`);
+        answer=await response.json();
+        if(!answer.ok || !answer.history) throw Error(answer.error||'保存に対応したApps Scriptへ更新してください。');
+        parsePrivateHistory(answer.history);
+      } finally { clearTimeout(timer); }
+      const sent=new Map(batch.map(c=>[historyEditKey(c),c.updated_at]));
+      const local=localHistoryEdits(id).map(c=>sent.get(historyEditKey(c))===c.updated_at?{...c,pending:false}:c);
+      localStorage.setItem(HISTORY_LOCAL_KEY+id,JSON.stringify(local));
+      if(id!==state.id) break;
+      state.historyDocument=answer.history;
+      state.eventHistory=parsePrivateHistory(mergeHistoryCells(answer.history,local,{strict:false}));
+      const remaining=local.filter(c=>c.pending===true).length;
+      state.historySaveNotice=remaining?`端末に保存しました。残り${count(remaining)}件を共有へ送信中です。`:
+        answer.keptNewer?'ほかの端末の新しい結果を表示しています。':'共有に保存しました。';
+      // この端末の編集は上の保存済み一覧に残る。ほかの共有設定のキャッシュを上書きしない。
+      state.historyRedraw?.();
+    }
+  } catch(error) {
+    if(id===state.id) {
+      state.historySaveNotice=`共有への送信待ちです。端末には残っています。${error.message}`;
+      state.historyRedraw?.();
+    }
+  } finally { historySending.delete(id); }
 }
 
 /**
@@ -960,7 +1041,12 @@ function rememberName(fromLink) {
 }
 
 async function connect(id) {
-  if (state.id !== id) state.model = null;
+  if (state.id !== id) {
+    state.model = null; state.eventHistory=null; state.historyDocument=null; state.historySaveNotice='';
+    document.querySelectorAll('.sheet-backdrop [data-close]').forEach(e=>e.click());
+    state.historyRedraw=null;
+    app.innerHTML='<p class="status">保存した記録を読み込んでいます…</p>';
+  }
   state.loading = false; reload.disabled = false;
   state.id = id;
   store.set(ID_KEY, id);
@@ -974,7 +1060,9 @@ async function connect(id) {
       state.notice = results.some(r => r.status === 'rejected')
         ? '一部の保存データを開けませんでした。「最新を読む」で復元してください。'
         : '端末に保存したデータを表示しています。更新するには「最新を読む」を押してください。';
-      showDocuments(m, p, metadata || {}); return;
+      showDocuments(m, p, metadata || {});
+      flushHistoryEdits();
+      return;
     }
     if (results.some(r => r.status === 'rejected')) throw new Error('保存した履歴を開けませんでした。');
   } catch {
@@ -1041,14 +1129,19 @@ function openEventHistory() {
   const historyView = view => {
     const weeks = state.eventHistory.weeks.filter(w=>w.type===view.type);
     const types = `<h2 id="sheet-title">長町南のイベント履歴</h2><div class="history-types">${HISTORY_TYPES.map(t=>`<button type="button" class="pill ${t===view.type?'':'pill-outline'}" data-history-type="${esc(t)}" aria-pressed="${t===view.type}">${esc(t)}</button>`).join('')}</div>`;
-    const notice = state.historyNotice ? `<p class="note">${esc(state.historyNotice)}</p>` : '';
+    let pending=0;
+    try { pending=localHistoryEdits().filter(c=>c.pending===true).length; } catch { /* 読み込み時の警告を表示する。 */ }
+    const notice = (state.historyNotice ? `<p class="note">${esc(state.historyNotice)}</p>` : '')
+      + `<p class="note" role="status" data-history-save-status>${esc(state.historyDocument?.shared_editing?(state.historySaveNotice||'顔文字を選ぶと共有へ保存します。'):'記号を編集するには共有用Apps Scriptを更新してから読み込み直してください。')}</p>`
+      + (pending?`<button type="button" class="pill pill-outline" data-history-retry>未送信${count(pending)}件を再送する</button>`:'');
     const rejected = state.eventHistory.rejected ? `<p class="note">形式が合わない編集${count(state.eventHistory.rejected)}件を表示していません。</p>` : '';
     if (!weeks.length) return `${types}${notice}<p class="note">この種別の週表はまだありません。</p>`;
     return `${types}${notice}${rejected}${weeks.map(w=>{
       const days=Array.from({length:7},(_,i)=>historyDay(w.from,i));
       const rows=w.machines.map(item=>`<tr><th scope="row"><span>${esc(displayMachineName(item.name))}</span><small>${count(item.count)}台</small></th>${days.map((d,i)=>{
         const name=historySavedName(item,index.get(d)??new Set());
-        return `<td><span class="history-symbol">${esc(item.results[i])}</span>${name ? `<button type="button" class="row history-cell" data-history-machine="${esc(name)}" data-history-day="${d}" aria-label="${esc(d)} ${esc(name)}のデータを開く">開く →</button>` : '<small>この日の記録なし</small>'}</td>`;
+        const key=encodeURIComponent(JSON.stringify({type:w.type,week:w.from,machine:item.name,day:d}));
+        return `<td><select class="history-symbol" data-history-edit="${esc(key)}"${state.historyDocument?.shared_editing?'':' disabled'} aria-label="${esc(d)} ${esc(displayMachineName(item.name))}の結果">${['',...state.eventHistory.symbols].map(s=>`<option value="${esc(s)}"${s===item.results[i]?' selected':''}>${esc(s||'空欄')}</option>`).join('')}</select>${name ? `<button type="button" class="row history-cell" data-history-machine="${esc(name)}" data-history-day="${d}" aria-label="${esc(d)} ${esc(name)}のデータを開く">開く →</button>` : '<small>この日の記録なし</small>'}</td>`;
       }).join('')}</tr>`).join('');
       return `<section class="history-week"><h3>${esc(w.from)}〜${esc(w.to)}</h3>${w.lineup_day?`<p class="note">分類日：${esc(w.lineup_day)}（作成時の構成で固定）</p>`:''}<div class="history-overflow"><table class="history-table"><thead><tr><th>機種名・台数</th>${days.map(d=>`<th>${esc(shortDateWeek(d))}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div></section>`;
     }).join('')}<p class="note">記号の意味は未設定です。「開く」は、その機種・その日の保存データを表示します。</p>`;
@@ -1058,10 +1151,12 @@ function openEventHistory() {
     view.items=racks;
     return `<p class="store">${esc(storeLabel('nagamachiminami'))}　${dateLabel(view.day)}</p><h2 id="sheet-title" class="long">${esc(displayMachineName(view.machine))}</h2><p class="caption">台を押すと、その日のデータを開きます。</p>${racks.length?tapList(racks.map((r,i)=>({lead:'',attrs:`data-history-rack="${i}"`,main:`<span class="machine num" style="display:block">${r.rack}番${rackMark(r)}</span><span class="rack num">BB ${r.bb}・RB ${r.rb}</span>`,right:`${netCell(r)}<span class="small num">${count(r.games)}G</span>`}))):'<p class="note">この日の機種データはありません。</p>'}`;
   };
-  openSheet({first:{kind:'history',type:HISTORY_TYPES[0]},
+  state.historyRedraw=openSheet({first:{kind:'history',type:HISTORY_TYPES[0]},
     body:view=>view.kind==='history'?historyView(view):view.kind==='historyMachine'?machineView(view):rackView(view),
     onAction:(action,view)=>{if(action.dataset.historyType) view.type=action.dataset.historyType;},
+    onChange:field=>{if(field.matches('[data-history-edit]')) queueHistoryEdit(field);},
     onRow:(row,push,view)=>{
+      if(row.dataset.historyRetry!=null) { flushHistoryEdits(); return; }
       if(view.kind==='history' && row.dataset.historyMachine && row.dataset.historyDay) push({kind:'historyMachine',machine:row.dataset.historyMachine,day:row.dataset.historyDay,picked:null});
       else if(view.kind==='historyMachine' && row.dataset.historyRack!=null) push({kind:'rack',rack:view.items[Number(row.dataset.historyRack)]});
     }});

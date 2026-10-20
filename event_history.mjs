@@ -102,3 +102,43 @@ export function historySavedName(m, names) {
   const hits = [...names].filter(n => normalized(n) === normalized(m.name));
   return hits.length === 1 ? hits[0] : null;
 }
+
+export const historyEditKey = c => JSON.stringify([c.store,c.type,c.week,c.machine,c.day]);
+
+/** 共有では既存の週・機種の結果記号だけを変更できる。 */
+export function historyCell(raw, model) {
+  if (!raw || raw.store !== STORE || !HISTORY_TYPES.includes(raw.type) || !name(raw.machine) ||
+      typeof raw.value !== 'string' || !['',...model.symbols].includes(raw.value)) throw Error('履歴の記号が不正です。');
+  const w = model.weeks.find(w=>w.type===raw.type && w.from===raw.week);
+  if (!w || !w.machines.some(m=>m.name===raw.machine) || day(raw.day)<day(w.from) || day(raw.day)>day(w.to))
+    throw Error('対象の週・機種・日付が履歴にありません。');
+  stamp(raw.updated_at);
+  return {store:STORE,type:raw.type,week:raw.week,machine:raw.machine,day:raw.day,value:raw.value,
+    updated_at:raw.updated_at,device:['pc','android','shared'].includes(raw.device)?raw.device:'pc'};
+}
+
+/** PCの文書は書き換えず、記号の編集時刻が新しい方を重ねる。不正な原文は残す。 */
+export function mergeHistoryCells(doc, incoming, {strict=true}={}) {
+  if (!Array.isArray(incoming) || incoming.length>30000) throw Error('履歴の件数が不正です。');
+  const model=parsePrivateHistory(doc), entries=new Map(), orphans=[];
+  for (const [items,check] of [[doc.cells??[],false],[incoming,strict]]) for (const raw of items) {
+    try {
+      const c=historyCell(raw,model), k=historyEditKey(c), old=entries.get(k);
+      if (!old || stamp(c.updated_at)>=stamp(old.updated_at)) entries.set(k,c);
+    } catch (e) { if(check) throw e; orphans.push(raw); }
+  }
+  const cells=[...entries.values(),...orphans];
+  if(cells.length>30000) throw Error('履歴の保存件数の上限に達しています。');
+  return {...doc,cells};
+}
+
+export function newHistoryCell(doc, fields, value, now=Date.now()) {
+  let time=BigInt(Math.trunc(now))*1000n;
+  for(const c of doc.cells??[]) {
+    if(c && historyEditKey(c)===historyEditKey({...fields,store:STORE})) {
+      try { if(stamp(c.updated_at)>=time) time=stamp(c.updated_at)+1000n; } catch { /* 原文は残す。 */ }
+    }
+  }
+  const updated_at=new Date(Number(time/1000n)).toISOString().replace(/\d{3}Z$/,String(time%1000000n).padStart(6,'0')+'Z');
+  return historyCell({...fields,store:STORE,value,updated_at,device:'shared'},parsePrivateHistory(doc));
+}
