@@ -18,6 +18,8 @@ const PLAUSIBLE_USE_PER_GAME = 1.75;
 const MAX_USE_PER_GAME = 3.0;
 const ZERO_Y = 200.5, TOP_Y = 20.5;
 const HALF = ZERO_Y - TOP_Y;
+// 幸町の正確なjo_netとの照合（旧推定の誤差100枚未満の6,875組）で確認した終点の半px補正。
+const END_PIXEL_CORRECTION = 0.5;
 
 function rise(values) {
   let low = 0, result = 0;
@@ -88,5 +90,5 @@ export function meruhenNetDetail(measurement, maxHold, games) {
     if (feasible.length === 1) chosen = feasible[0];
   }
   if (chosen == null) return none;
-  return {value: roundHalfAway(end * chosen / HALF), needsCheck};
+  return {value: roundHalfAway((end - END_PIXEL_CORRECTION) * chosen / HALF), needsCheck};
 }
