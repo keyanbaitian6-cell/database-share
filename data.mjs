@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=8f05657e84f3';
+import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=9531dc8bc182';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -175,6 +175,23 @@ export function dayNet(racks) {
   const judged = results.length, won = results.filter(Boolean).length;
   return {total: nets.length ? nets.reduce((s, r) => s + r.net, 0) : null, captured: nets.length, racks: racks.length,
           judged, won, winRate: showWinRate(nets.length, judged)};
+}
+
+/** 「0回転」「500回転未満」として数える境目（その日のまとめの注記用）。 */
+export const LOW_GAMES = 500;
+
+/** その日の台のうち、0回転の台数と、1〜499回転（0回転は含めない）の台数。差枚の取れていない台の目安。 */
+export function lowGames(racks) {
+  const zero = racks.filter(r => r.games === 0).length;
+  const short = racks.filter(r => r.games > 0 && r.games < LOW_GAMES).length;
+  return {zero, short};
+}
+
+/** 「（40台が0回転。8台が500回転未満）」。どちらも0台なら空。 */
+export function lowGamesNote(racks) {
+  const {zero, short} = lowGames(racks);
+  const parts = [zero ? `${zero}台が0回転` : '', short ? `${short}台が${LOW_GAMES}回転未満` : ''].filter(Boolean);
+  return parts.length ? `（${parts.join('。')}）` : '';
 }
 
 /**
