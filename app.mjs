@@ -1,4 +1,4 @@
-import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=1129624e826b';
+import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=a6c3593a86ce';
 // 閲覧専用の共有ページ（お試し、2026-10-09。EVENT_CALENDAR.md「閲覧専用の共有ページ」）。
 // 読むだけのApps Script（database_android/tool/viewer_drive_script_readonly.gs）からDriveのファイルを読み、
 // イベントカレンダー（各日のイベント・総差枚）と、日付を押したときの差枚TOP50（11位からは折りたたみ）・強かった機種10選、
@@ -6,8 +6,8 @@ import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, histor
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=1129624e826b';
-import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=1129624e826b';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=a6c3593a86ce';
+import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=a6c3593a86ce';
 import {
   MERUHEN_STORES, calendarDay, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords, lowGamesNote,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
@@ -19,7 +19,7 @@ import {
   varietyWeek, varietyMaxRacksFor, rainbowTodayRows,
   monthDayList, periodWinRate, winRateYears, yearWinRates, loadFailureText,
   characterBirthdayCellLabel, characterBirthdaysOn, parseCharacterBirthdays,
-} from './data.mjs?v=1129624e826b';
+} from './data.mjs?v=a6c3593a86ce';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -79,7 +79,7 @@ async function getJson(url) {
  */
 async function loadBirthdays() {
   try {
-    const response = await fetch('./character_birthdays.json?v=1129624e826b', {credentials: 'omit'});
+    const response = await fetch('./character_birthdays.json?v=a6c3593a86ce', {credentials: 'omit'});
     if (!response.ok) return;
     state.birthdays = parseCharacterBirthdays(await response.json());
     if (state.model) render();
@@ -227,7 +227,7 @@ function render() {
       <button type="button" class="pill pill-outline" data-idle-open>バラエティの回っていない台</button>
       ${Object.hasOwn(MERUHEN_STORES, state.store) ? `<button type="button" class="pill pill-outline" data-variety-open>バラエティ${RAINBOW}</button>` : ''}
       ${hasSuffixSummary(state.store) ? '<button type="button" class="pill pill-outline" data-suffix-open>末尾別データまとめ</button>' : ''}
-      ${state.store === 'nagamachiminami' ? '<button type="button" class="pill pill-outline" data-event-history-open>イベント履歴</button>' : ''}
+      ${['nagamachiminami','saiwaichou'].includes(state.store) ? `<button type="button" class="pill pill-outline" data-event-history-open>${state.store==='saiwaichou'?'バラエティ履歴':'イベント履歴'}</button>` : ''}
       <button type="button" class="pill pill-outline" data-year-open>月別・年間の勝率</button>
     </div>
     <div class="months">
@@ -524,6 +524,7 @@ function historyEditIsAhead(cell, now=Date.now()) {
 
 function queueHistoryEdit(field) {
   try {
+    if(state.store==='saiwaichou') throw Error('幸町の優・良はPCで入力・修正してください。');
     if(!state.historyDocument?.shared_editing) throw Error('共有用Apps Scriptを更新してから読み込み直してください。');
     const local=localHistoryEdits();
     const fields=JSON.parse(decodeURIComponent(field.dataset.historyEdit));
@@ -1148,40 +1149,50 @@ function openBirthdays(first) {
 
 /** 画像から記録した長町南のイベント履歴。記号は意味付けせず、同日の機種一覧へつなぐ。 */
 function openEventHistory() {
-  if (state.store !== 'nagamachiminami') return;
+  if (!['nagamachiminami','saiwaichou'].includes(state.store)) return;
+  const location=state.store, saiwaichou=location==='saiwaichou';
+  const types=saiwaichou?['バラエティ']:HISTORY_TYPES;
+  let varietyModel;
+  if(saiwaichou) {
+    if(!state.historyDocument?.saiwaichou_variety) { toast('PCで幸町のバラエティ履歴を共有へ反映してください。');return; }
+    try { varietyModel=parsePrivateHistory(state.historyDocument.saiwaichou_variety,location); }
+    catch(error) { toast(`幸町の履歴を読めません：${error.message}`);return; }
+  }
   if (!state.eventHistory) {
     toast(state.historyNotice || '履歴がまだありません。PCで共有へ反映し、Apps Scriptを更新してから再読み込みしてください。'); return;
   }
   const index = new Map();
   for (const [key, records] of state.model.byDay) {
-    if (key.startsWith('nagamachiminami|')) index.set(key.slice('nagamachiminami|'.length), new Set(records.map(r=>r.machine)));
+    if (key.startsWith(location+'|')) index.set(key.slice(location.length+1), new Set(records.map(r=>r.machine)));
   }
   const historyView = view => {
-    const weeks = state.eventHistory.weeks.filter(w=>w.type===view.type);
-    const types = `<h2 id="sheet-title">長町南のイベント履歴</h2><div class="history-types">${HISTORY_TYPES.map(t=>`<button type="button" class="pill ${t===view.type?'':'pill-outline'}" data-history-type="${esc(t)}" aria-pressed="${t===view.type}">${esc(t)}</button>`).join('')}</div>`;
+    const model=saiwaichou?varietyModel:state.eventHistory;
+    const weeks = model.weeks.filter(w=>w.type===view.type);
+    const heading = `<h2 id="sheet-title">${saiwaichou?'幸町のバラエティ履歴':'長町南のイベント履歴'}</h2><div class="history-types">${types.map(t=>`<button type="button" class="pill ${t===view.type?'':'pill-outline'}" data-history-type="${esc(t)}" aria-pressed="${t===view.type}">${esc(t)}</button>`).join('')}</div>`;
     let pending=0;
-    try { pending=localHistoryEdits().filter(c=>c.pending===true).length; } catch { /* 読み込み時の警告を表示する。 */ }
+    try { if(!saiwaichou) pending=localHistoryEdits().filter(c=>c.pending===true).length; } catch { /* 読み込み時の警告を表示する。 */ }
     const notice = (state.historyNotice ? `<p class="note">${esc(state.historyNotice)}</p>` : '')
-      + `<p class="note" role="status" data-history-save-status>${esc(state.historyDocument?.shared_editing?(state.historySaveNotice||'顔文字を選ぶと共有へ保存します。'):'記号を編集するには共有用Apps Scriptを更新してから読み込み直してください。')}</p>`
+      + `<p class="note" role="status" data-history-save-status>${esc(saiwaichou?'優・良の入力・修正はPCで行います。':state.historyDocument?.shared_editing?(state.historySaveNotice||'顔文字を選ぶと共有へ保存します。'):'記号を編集するには共有用Apps Scriptを更新してから読み込み直してください。')}</p>`
       + (pending?`<button type="button" class="pill pill-outline" data-history-retry>未送信${count(pending)}件を再送する</button>`:'');
-    const rejected = state.eventHistory.rejected ? `<p class="note">形式が合わない編集${count(state.eventHistory.rejected)}件を表示していません。</p>` : '';
-    if (!weeks.length) return `${types}${notice}<p class="note">この種別の週表はまだありません。</p>`;
-    return `${types}${notice}${rejected}${weeks.map(w=>{
+    const rejected = model.rejected ? `<p class="note">形式が合わない編集${count(model.rejected)}件を表示していません。</p>` : '';
+    if (!weeks.length) return `${heading}${notice}<p class="note">この種別の週表はまだありません。</p>`;
+    return `${heading}${notice}${rejected}${weeks.map(w=>{
       const days=Array.from({length:7},(_,i)=>historyDay(w.from,i));
-      const rows=w.machines.map(item=>`<tr><th scope="row"><span${w.type==='バラエティ'&&!item.results.includes('😍')?' class="history-no-heart"':''}>${esc(displayMachineName(item.name))}</span><small>${count(item.count)}台</small></th>${days.map((d,i)=>{
+      const rows=w.machines.map(item=>`<tr><th scope="row"><span${!saiwaichou&&w.type==='バラエティ'&&!item.results.includes('😍')?' class="history-no-heart"':''}>${esc(displayMachineName(item.name))}</span><small>${count(item.count)}台</small></th>${days.map((d,i)=>{
         const name=historySavedName(item,index.get(d)??new Set());
         const key=encodeURIComponent(JSON.stringify({type:w.type,week:w.from,machine:item.name,day:d}));
-        return `<td><select class="history-symbol" data-history-edit="${esc(key)}"${state.historyDocument?.shared_editing?'':' disabled'} aria-label="${esc(d)} ${esc(displayMachineName(item.name))}の結果">${['',...state.eventHistory.symbols].map(s=>`<option value="${esc(s)}"${s===item.results[i]?' selected':''}>${esc(s||'空欄')}</option>`).join('')}</select>${name ? `<button type="button" class="row history-cell" data-history-machine="${esc(name)}" data-history-day="${d}" aria-label="${esc(d)} ${esc(name)}のデータを開く">開く →</button>` : '<small>この日の記録なし</small>'}</td>`;
+        const result=saiwaichou?`<span class="history-symbol">${esc(item.results[i]||'—')}</span>`:`<select class="history-symbol" data-history-edit="${esc(key)}"${state.historyDocument?.shared_editing?'':' disabled'} aria-label="${esc(d)} ${esc(displayMachineName(item.name))}の結果">${['',...model.symbols].map(s=>`<option value="${esc(s)}"${s===item.results[i]?' selected':''}>${esc(s||'空欄')}</option>`).join('')}</select>`;
+        return `<td>${result}${name ? `<button type="button" class="row history-cell" data-history-machine="${esc(name)}" data-history-day="${d}" aria-label="${esc(d)} ${esc(name)}のデータを開く">開く →</button>` : '<small>この日の記録なし</small>'}</td>`;
       }).join('')}</tr>`).join('');
       return `<section class="history-week"><h3>${esc(w.from)}〜${esc(w.to)}</h3>${w.lineup_day?`<p class="note">分類日：${esc(w.lineup_day)}（作成時の構成で固定）</p>`:''}<div class="history-overflow"><table class="history-table"><thead><tr><th>機種名・台数</th>${days.map(d=>`<th>${esc(shortDateWeek(d))}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div></section>`;
-    }).join('')}<p class="note">記号の意味は未設定です。「開く」は、その機種・その日の保存データを表示します。</p>`;
+    }).join('')}<p class="note">${saiwaichou?'2,500枚以上＝優、0〜2,499枚＝良。マイナス・差枚不明は空欄です。入力・修正はPCのみ。':'記号の意味は未設定です。'}「開く」は、その機種・その日の保存データを表示します。</p>`;
   };
   const machineView = view => {
-    const racks=(state.model.byDay.get(`nagamachiminami|${view.day}`)??[]).filter(r=>r.machine===view.machine).sort((a,b)=>a.rack-b.rack);
+    const racks=(state.model.byDay.get(`${location}|${view.day}`)??[]).filter(r=>r.machine===view.machine).sort((a,b)=>a.rack-b.rack);
     view.items=racks;
-    return `<p class="store">${esc(storeLabel('nagamachiminami'))}　${dateLabel(view.day)}</p><h2 id="sheet-title" class="long">${esc(displayMachineName(view.machine))}</h2><p class="caption">台を押すと、その日のデータを開きます。</p>${racks.length?tapList(racks.map((r,i)=>({lead:'',attrs:`data-history-rack="${i}"`,main:`<span class="machine num" style="display:block">${r.rack}番${rackMark(r)}</span><span class="rack num">BB ${r.bb}・RB ${r.rb}</span>`,right:`${netCell(r)}<span class="small num">${count(r.games)}G</span>`}))):'<p class="note">この日の機種データはありません。</p>'}`;
+    return `<p class="store">${esc(storeLabel(location))}　${dateLabel(view.day)}</p><h2 id="sheet-title" class="long">${esc(displayMachineName(view.machine))}</h2><p class="caption">台を押すと、その日のデータを開きます。</p>${racks.length?tapList(racks.map((r,i)=>({lead:'',attrs:`data-history-rack="${i}"`,main:`<span class="machine num" style="display:block">${r.rack}番${rackMark(r)}</span><span class="rack num">BB ${r.bb}・RB ${r.rb}</span>`,right:`${netCell(r)}<span class="small num">${count(r.games)}G</span>`}))):'<p class="note">この日の機種データはありません。</p>'}`;
   };
-  state.historyRedraw=openSheet({first:{kind:'history',type:HISTORY_TYPES[0]},
+  state.historyRedraw=openSheet({first:{kind:'history',type:types[0]},
     body:view=>view.kind==='history'?historyView(view):view.kind==='historyMachine'?machineView(view):rackView(view),
     onAction:(action,view)=>{if(action.dataset.historyType) view.type=action.dataset.historyType;},
     onChange:field=>{if(field.matches('[data-history-edit]')) queueHistoryEdit(field);},

@@ -26,18 +26,23 @@ const machine = (m, symbols, results = true) => {
   return {name:m.name, count:m.count, record_name:m.record_name ?? null, results:results ? [...m.results] : Array(7).fill('')};
 };
 export const historyDay = (first, i) => new Date(day(first) + i * 86400000).toISOString().slice(0,10);
-export function parsePrivateHistory(doc) {
+export function parsePrivateHistory(doc, store = STORE) {
+  if (![STORE, 'saiwaichou'].includes(store)) throw Error('対応していない店舗です。');
+  const types = store === STORE ? HISTORY_TYPES : ['バラエティ'];
+  const maxRacks = store === STORE ? 3 : 2;
   if (!doc || doc.format !== 'database-event-history' || doc.version !== 1) throw Error('履歴の形式が違います。');
   const base = doc.base;
   if (!base) throw Error('履歴の反映には、PCで共有用ファイルの更新とApps Scriptの更新が必要です。');
-  if (base.version !== 2 || base.store !== STORE || !Array.isArray(base.symbols) || !base.symbols.length ||
+  if (base.version !== 2 || base.store !== store || !Array.isArray(base.symbols) || !base.symbols.length ||
       base.symbols.some(v => !name(v) || [...v].length > 16) || new Set(base.symbols).size !== base.symbols.length || !Array.isArray(base.weeks)) throw Error('履歴の基準が読めません。');
+  if (store === 'saiwaichou' && JSON.stringify(base.symbols)!==JSON.stringify(['優','良'])) throw Error('幸町の評価は優・良だけです。');
   if (base.user_blank_days != null && !Array.isArray(base.user_blank_days)) throw Error('空欄の日付が不正です。');
   for (const d of base.user_blank_days ?? []) day(d);
   const weeks = new Map(), occupied = new Map();
   for (const w of base.weeks) {
-    if (!w || !HISTORY_TYPES.includes(w.type) || new Date(day(w.from)).getUTCDay() !== 1 || day(w.to) - day(w.from) !== 6 * 86400000 || occupied.has(w.from) || !Array.isArray(w.machines)) throw Error('履歴の週が重複または不正です。');
+    if (!w || !types.includes(w.type) || new Date(day(w.from)).getUTCDay() !== 1 || day(w.to) - day(w.from) !== 6 * 86400000 || occupied.has(w.from) || !Array.isArray(w.machines)) throw Error('履歴の週が重複または不正です。');
     const machines = w.machines.map(m => machine(m, base.symbols));
+    if (store === 'saiwaichou' && machines.some(m=>m.count>2)) throw Error('幸町のバラエティは1〜2台機種です。');
     if (new Set(machines.map(m => m.name)).size !== machines.length) throw Error('機種名が重複しています。');
     weeks.set(`${w.type}|${w.from}`, {...w, machines}); occupied.set(w.from, w.type);
   }
@@ -54,10 +59,10 @@ export function parsePrivateHistory(doc) {
   const definitions=[];
   for(const w of doc.weeks??[]) {
     try {
-      if (!w || w.store !== STORE || w.type !== 'バラエティ' || new Date(day(w.week)).getUTCDay() !== 1 || day(w.lineup_day) < day(w.week) || day(w.lineup_day) > day(w.week) + 6*86400000 || !Array.isArray(w.machines) || (Object.hasOwn(w,'removed') && typeof w.removed !== 'boolean') || (occupied.get(w.week) ?? 'バラエティ') !== 'バラエティ') throw Error();
+      if (!w || w.store !== store || w.type !== 'バラエティ' || new Date(day(w.week)).getUTCDay() !== 1 || day(w.lineup_day) < day(w.week) || day(w.lineup_day) > day(w.week) + 6*86400000 || !Array.isArray(w.machines) || (Object.hasOwn(w,'removed') && typeof w.removed !== 'boolean') || (occupied.get(w.week) ?? 'バラエティ') !== 'バラエティ') throw Error();
       stamp(w.updated_at);
       const machines=w.machines.map(m=>machine(m,base.symbols,false));
-      if (!machines.length || machines.some(m=>m.count>3) || new Set(machines.map(m=>m.name)).size!==machines.length) throw Error();
+      if (!machines.length || machines.some(m=>m.count>maxRacks) || new Set(machines.map(m=>m.name)).size!==machines.length) throw Error();
       definitions.push({...w,machines}); occupied.set(w.week,w.type);
     } catch { rejected++; }
   }
@@ -68,11 +73,11 @@ export function parsePrivateHistory(doc) {
     const valid = [];
     for (const c of doc[group] ?? []) {
       try {
-        if (!c || c.store !== STORE || !name(c.machine)) throw Error();
+        if (!c || c.store !== store || !name(c.machine)) throw Error();
         stamp(c.updated_at);
         const scoped=group==='cells' || Object.hasOwn(c,'week') || Object.hasOwn(c,'type');
         if(scoped) {
-          if(!HISTORY_TYPES.includes(c.type)) throw Error();
+          if(!types.includes(c.type)) throw Error();
           day(c.week);
           const w=weeks.get(`${c.type}|${c.week}`);
           if(!w || !w.machines.some(m=>m.name===c.machine)) throw Error();
@@ -94,7 +99,7 @@ export function parsePrivateHistory(doc) {
       }
     }
   }
-  return {store:STORE, symbols:[...base.symbols], weeks:[...weeks.values()].filter(w => !w.removed).sort((a,b) => b.from.localeCompare(a.from)), rejected};
+  return {store, symbols:[...base.symbols], weeks:[...weeks.values()].filter(w => !w.removed).sort((a,b) => b.from.localeCompare(a.from)), rejected};
 }
 export function historySavedName(m, names) {
   if (m.record_name != null) return names.has(m.record_name) ? m.record_name : null;
