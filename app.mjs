@@ -1,4 +1,4 @@
-import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell, historyGradeGap} from './event_history.mjs?v=2851c908035e';
+import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell, historyGradeGap} from './event_history.mjs?v=33e436aac8f8';
 // 閲覧専用の共有ページ（お試し、2026-10-09。EVENT_CALENDAR.md「閲覧専用の共有ページ」）。
 // 読むだけのApps Script（database_android/tool/viewer_drive_script_readonly.gs）からDriveのファイルを読み、
 // イベントカレンダー（各日のイベント・総差枚）と、日付を押したときの差枚TOP50（11位からは折りたたみ）・強かった機種10選、
@@ -6,8 +6,8 @@ import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, histor
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=2851c908035e';
-import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=2851c908035e';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=33e436aac8f8';
+import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=33e436aac8f8';
 import {
   MERUHEN_STORES, calendarDay, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords, lowGamesNote,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
@@ -19,7 +19,7 @@ import {
   varietyWeek, varietyMaxRacksFor, rainbowTodayRows,
   monthDayList, periodWinRate, winRateYears, yearWinRates, loadFailureText,
   characterBirthdayCellLabel, characterBirthdaysOn, parseCharacterBirthdays,
-} from './data.mjs?v=2851c908035e';
+} from './data.mjs?v=33e436aac8f8';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -79,7 +79,7 @@ async function getJson(url) {
  */
 async function loadBirthdays() {
   try {
-    const response = await fetch('./character_birthdays.json?v=2851c908035e', {credentials: 'omit'});
+    const response = await fetch('./character_birthdays.json?v=33e436aac8f8', {credentials: 'omit'});
     if (!response.ok) return;
     state.birthdays = parseCharacterBirthdays(await response.json());
     if (state.model) render();
@@ -411,11 +411,23 @@ function openSheet({first, body, onRow, onChange, onAction}) {
       </div>`;
   };
   const rackStepBar = (view) => {
+    if (view.kind === 'historyMachine') return machineStepBar(view);
     if (view.kind !== 'rack' || !(view.list?.length > 1)) return '';
     const before = rackNeighbor(view, -1), after = rackNeighbor(view, 1);
+    // 隣が別の機種なら機種名も添える（イベント履歴は表の下の行の機種へ進むため）。
+    const label = (r) => `${r.rack}番${r.machine !== view.rack.machine ? `・${esc(displayMachineName(r.machine))}` : ''}`;
     return `<div class="date-bar">
-        <button type="button" class="pill pill-outline rack-step" data-rack-step="-1"${before ? '' : ' disabled'}>‹ 前の台${before ? `（${before.rack}番）` : ''}</button>
-        <button type="button" class="pill pill-outline rack-step" data-rack-step="1"${after ? '' : ' disabled'}>次の台${after ? `（${after.rack}番）` : ''} ›</button>
+        <button type="button" class="pill pill-outline rack-step" data-rack-step="-1"${before ? '' : ' disabled'}>‹ 前の台${before ? `（${label(before)}）` : ''}</button>
+        <button type="button" class="pill pill-outline rack-step" data-rack-step="1"${after ? '' : ' disabled'}>次の台${after ? `（${label(after)}）` : ''} ›</button>
+      </div>`;
+  };
+  // イベント履歴の機種の台一覧：表の上下の行の機種へ（2026-10-22 利用者「ディスクアップに行くボタンが絶対必要」）。日付を送ったあとは出さない。
+  const machineStepBar = (view) => {
+    if (!(view.names?.length > 1) || view.day !== view.namesDay) return '';
+    const i = view.names.indexOf(view.machine), before = view.names[i - 1], after = view.names[i + 1];
+    return `<div class="date-bar">
+        <button type="button" class="pill pill-outline rack-step" data-machine-step="-1"${i > 0 ? '' : ' disabled'}>‹ 前の機種${before ? `（${esc(displayMachineName(before))}）` : ''}</button>
+        <button type="button" class="pill pill-outline rack-step" data-machine-step="1"${i >= 0 && after ? '' : ' disabled'}>次の機種${after ? `（${esc(displayMachineName(after))}）` : ''} ›</button>
       </div>`;
   };
   const render = () => {
@@ -479,6 +491,12 @@ function openSheet({first, body, onRow, onChange, onAction}) {
     if (rackMove && view.list) {
       const dir = Number(rackMove.dataset.rackStep), next = rackNeighbor(view, dir);
       if (next) { view.index += dir; view.rack = next; view.scroll = 0; render(); }
+      return;
+    }
+    const machineMove = e.target.closest('[data-machine-step]');
+    if (machineMove && view.names) {
+      const next = view.names[view.names.indexOf(view.machine) + Number(machineMove.dataset.machineStep)];
+      if (next) { view.machine = next; view.picked = null; view.scroll = 0; render(); }
       return;
     }
     const step = e.target.closest('[data-day-step]');
@@ -1234,6 +1252,8 @@ function openEventHistory() {
       ${saiwaichou?`<p class="history-gap-note">${lastRecordDay?`赤字：${esc(lastRecordDay)}までの5暦日、優・良なし（空欄の日を含む）`:'この週は記録がないため赤字判定はしません。'}</p>`:''}</div>`;
     return `${heading}${navigation}${notice}${rejected}${[selected].map(w=>{
       const days=Array.from({length:7},(_,i)=>historyDay(w.from,i));
+      // 日ごとの、表の上から下の順の機種（記録のある機種だけ）。開いた画面から「次の機種」「次の台」で下の行へ送るため（2026-10-22 利用者）。
+      view.dayNames=Object.fromEntries(days.map(d=>[d,[...new Set(w.machines.map(item=>historySavedName(item,index.get(d)??new Set())).filter(Boolean))]]));
       const rows=w.machines.map(item=>`<tr><th scope="row"><span${saiwaichou&&historyGradeGap(model.weeks,item,lastRecordDay)?' class="history-grade-gap"':!saiwaichou&&w.type==='バラエティ'&&!item.results.includes('😍')?' class="history-no-heart"':''}>${esc(displayMachineName(item.name))}</span><small>${count(item.count)}台</small></th>${days.map((d,i)=>{
         const name=historySavedName(item,index.get(d)??new Set());
         const key=encodeURIComponent(JSON.stringify({type:w.type,week:w.from,machine:item.name,day:d}));
@@ -1243,9 +1263,12 @@ function openEventHistory() {
       return `<section class="history-week"><h3>${esc(w.from)}〜${esc(w.to)}</h3>${w.lineup_day?`<p class="note">分類日：${esc(w.lineup_day)}（作成時の構成で固定）</p>`:''}<div class="history-overflow"><table class="history-table"><thead><tr><th>機種名・台数</th>${days.map(d=>`<th>${esc(shortDateWeek(d))}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div></section>`;
     }).join('')}<p class="note">${saiwaichou?'2,500枚以上＝優、0〜2,499枚＝良。マイナス・差枚不明は空欄です。入力・修正はPCのみ。':'記号の意味は未設定です。'}「↗」は、その機種・その日の保存データを表示します。</p>`;
   };
+  const racksOf=(day,machine)=>(state.model.byDay.get(`${location}|${day}`)??[]).filter(r=>r.machine===machine).sort((a,b)=>a.rack-b.rack);
   const machineView = view => {
-    const racks=(state.model.byDay.get(`${location}|${view.day}`)??[]).filter(r=>r.machine===view.machine).sort((a,b)=>a.rack-b.rack);
+    const racks=racksOf(view.day,view.machine);
     view.items=racks;
+    // 台のデータの前後は、表の順に機種をまたいで送る（この機種の最後の台の次は、下の行の機種の台）。日付を送ったあとはこの機種の中だけ。
+    view.rackOrder=view.names&&view.day===view.namesDay?view.names.flatMap(m=>racksOf(view.day,m)):racks;
     return `<p class="store">${esc(storeLabel(location))}　${dateLabel(view.day)}</p><h2 id="sheet-title" class="long">${esc(displayMachineName(view.machine))}</h2><p class="caption">台を押すと、その日のデータを開きます。</p>${racks.length?tapList(racks.map((r,i)=>({lead:'',attrs:`data-history-rack="${i}"`,main:`<span class="machine num" style="display:block">${r.rack}番${rackMark(r)}</span><span class="rack num">BB ${r.bb}・RB ${r.rb}</span>`,right:`${netCell(r)}<span class="small num">${count(r.games)}G</span>`}))):'<p class="note">この日の機種データはありません。</p>'}`;
   };
   state.historyRedraw=openSheet({first:{kind:'history',type:types[0]},
@@ -1262,8 +1285,8 @@ function openEventHistory() {
     },
     onRow:(row,push,view)=>{
       if(row.dataset.historyRetry!=null) { flushHistoryEdits(); return; }
-      if(view.kind==='history' && row.dataset.historyMachine && row.dataset.historyDay) push({kind:'historyMachine',machine:row.dataset.historyMachine,day:row.dataset.historyDay,picked:null});
-      else if(view.kind==='historyMachine' && row.dataset.historyRack!=null) push(rackPage(view.items[Number(row.dataset.historyRack)],view.items));
+      if(view.kind==='history' && row.dataset.historyMachine && row.dataset.historyDay) push({kind:'historyMachine',machine:row.dataset.historyMachine,day:row.dataset.historyDay,picked:null,names:view.dayNames?.[row.dataset.historyDay],namesDay:row.dataset.historyDay});
+      else if(view.kind==='historyMachine' && row.dataset.historyRack!=null) push(rackPage(view.items[Number(row.dataset.historyRack)],view.rackOrder));
     }});
 }
 
