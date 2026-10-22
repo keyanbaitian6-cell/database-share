@@ -1,6 +1,23 @@
 // 週イベント履歴は接続先からだけ読む。公開ファイルには機種名・記号一覧を同梱しない。
 const STORE = 'nagamachiminami';
 export const HISTORY_TYPES = ['4台構成', '半列', 'バラエティ'];
+
+// 表示週の最終記録日を基準に5暦日を見る。空欄は日数に含み、前週の評価も参照する。
+export function historyGradeGap(weeks, machine, lastDay) {
+  if (!lastDay) return false;
+  const end = day(lastDay);
+  for (let offset = 0; offset < 5; offset++) {
+    const target = new Date(end - offset * 86400000).toISOString().slice(0, 10);
+    for (const week of weeks) {
+      if (week.type !== 'バラエティ' || target < week.from || target > week.to) continue;
+      const saved = week.machines.find(m => m.name === machine.name ||
+        (machine.record_name && m.record_name === machine.record_name));
+      const value = saved?.results[Math.round((day(target) - day(week.from)) / 86400000)];
+      if (value === '優' || value === '良') return false;
+    }
+  }
+  return true;
+}
 const name = s => typeof s === 'string' && s.trim().length > 0 && [...s].length <= 300 && !/[\x00-\x1f]/.test(s);
 function day(s) {
   if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) throw Error('履歴の日付が読めません。');
