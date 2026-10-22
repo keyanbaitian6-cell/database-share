@@ -1,4 +1,4 @@
-import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell, historyGradeGap} from './event_history.mjs?v=a580aadc3bb5';
+import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell, historyGradeGap} from './event_history.mjs?v=533fc50e9f3a';
 // 閲覧専用の共有ページ（お試し、2026-10-09。EVENT_CALENDAR.md「閲覧専用の共有ページ」）。
 // 読むだけのApps Script（database_android/tool/viewer_drive_script_readonly.gs）からDriveのファイルを読み、
 // イベントカレンダー（各日のイベント・総差枚）と、日付を押したときの差枚TOP50（11位からは折りたたみ）・強かった機種10選、
@@ -6,8 +6,8 @@ import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, histor
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=a580aadc3bb5';
-import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=a580aadc3bb5';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=533fc50e9f3a';
+import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=533fc50e9f3a';
 import {
   MERUHEN_STORES, calendarDay, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords, lowGamesNote,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
@@ -19,7 +19,7 @@ import {
   varietyWeek, varietyMaxRacksFor, rainbowTodayRows,
   monthDayList, periodWinRate, winRateYears, yearWinRates, loadFailureText,
   characterBirthdayCellLabel, characterBirthdaysOn, parseCharacterBirthdays,
-} from './data.mjs?v=a580aadc3bb5';
+} from './data.mjs?v=533fc50e9f3a';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -79,7 +79,7 @@ async function getJson(url) {
  */
 async function loadBirthdays() {
   try {
-    const response = await fetch('./character_birthdays.json?v=a580aadc3bb5', {credentials: 'omit'});
+    const response = await fetch('./character_birthdays.json?v=533fc50e9f3a', {credentials: 'omit'});
     if (!response.ok) return;
     state.birthdays = parseCharacterBirthdays(await response.json());
     if (state.model) render();
@@ -343,6 +343,23 @@ function setViewDay(view, day) {
   }
 }
 
+/**
+ * 一覧から台のデータを開く画面。[list] は開いた一覧に並んでいた順の台（押せる台だけ）。下の台が次の台（2026-10-22 利用者
+ * 「次の台（下の台）のデータを表示するボタン」）。
+ */
+const rackPage = (rack, list) => ({kind: 'rack', rack, list, index: list.indexOf(rack)});
+
+/**
+ * 一覧で隣の台（無ければ null）。台のデータで日付を送っていたら、隣の台もいま見ている日の記録にする（無ければ一覧の日のまま）。
+ */
+function rackNeighbor(view, dir) {
+  const next = view.list[view.index + dir];
+  if (!next || view.index < 0) return null;
+  const r = view.rack;
+  if (r.day === view.list[view.index].day) return next;
+  return (state.model.byDay.get(`${r.store}|${r.day}`) ?? []).find(x => x.machine === next.machine && x.rack === next.rack) ?? next;
+}
+
 /** 上に固定する見出し（下まで送っても、何の画面か分かるように）。 */
 function titleOfView(view) {
   if (view.kind === 'rack') return `${view.rack.rack}番台${view.rack.rainbow ? ` ${RAINBOW}` : ''}`;
@@ -363,10 +380,10 @@ function titleOfView(view) {
  * 押したとき（push で次の画面。いまの画面も渡す）、[onChange] が選択欄を変えたとき（rerender で描き直す）。
  * 上に固定した帯に、戻る・見出し・閉じると、日付送り（前の日・日付・次の日）。日を変えてもスクロール位置はそのまま。
  * 「戻る」（Esc）で前の画面へ、開いていた折りたたみ・スクロール位置のまま戻る。
- * [backOnly]：重ねた画面では「閉じる」を隠し、戻るだけにする（イベント履歴：閉じると履歴ごと消えて分かりにくいため、2026-10-22）。
- * [rackStep]：台のデータの画面に「前の台・次の台」を出す。(view, 向き) から隣の台を返す（無ければ null）。
+ * 重ねた画面では「閉じる」を隠し、戻るだけにする（閉じると一覧ごと消えて「戻る」との違いが分かりにくいため、2026-10-22 利用者指摘）。
+ * 台のデータの画面 {kind: 'rack', rack, list} は、開いた一覧の並び（list）で「前の台・次の台」へ送る（rackNeighbor）。
  */
-function openSheet({first, body, onRow, onChange, onAction, backOnly, rackStep}) {
+function openSheet({first, body, onRow, onChange, onAction}) {
   const views = [first];
   const backdrop = document.createElement('div');
   backdrop.className = 'sheet-backdrop';
@@ -394,8 +411,8 @@ function openSheet({first, body, onRow, onChange, onAction, backOnly, rackStep})
       </div>`;
   };
   const rackStepBar = (view) => {
-    if (!rackStep || view.kind !== 'rack') return '';
-    const before = rackStep(view, -1), after = rackStep(view, 1);
+    if (view.kind !== 'rack' || !(view.list?.length > 1)) return '';
+    const before = rackNeighbor(view, -1), after = rackNeighbor(view, 1);
     return `<div class="date-bar">
         <button type="button" class="pill pill-outline rack-step" data-rack-step="-1"${before ? '' : ' disabled'}>‹ 前の台${before ? `（${before.rack}番）` : ''}</button>
         <button type="button" class="pill pill-outline rack-step" data-rack-step="1"${after ? '' : ' disabled'}>次の台${after ? `（${after.rack}番）` : ''} ›</button>
@@ -405,7 +422,7 @@ function openSheet({first, body, onRow, onChange, onAction, backOnly, rackStep})
     const view = views[views.length - 1];
     sheet.classList.toggle('history-sheet', view.kind === 'history');
     // 隠した「閉じる」も残す（別の接続先へ切り替えるとき、開いたシートをこのボタンで閉じるため）。
-    const hideClose = backOnly && views.length > 1;
+    const hideClose = views.length > 1;
     sheet.innerHTML = `
       <div class="sheet-head">
         <div class="head-row">${views.length > 1 ? '<button type="button" class="pill pill-outline" data-back>‹ 戻る</button>' : ''}
@@ -459,9 +476,9 @@ function openSheet({first, body, onRow, onChange, onAction, backOnly, rackStep})
       return;
     }
     const rackMove = e.target.closest('[data-rack-step]');
-    if (rackMove && rackStep) {
-      const next = rackStep(view, Number(rackMove.dataset.rackStep));
-      if (next) { view.rack = next; view.scroll = 0; render(); }
+    if (rackMove && view.list) {
+      const dir = Number(rackMove.dataset.rackStep), next = rackNeighbor(view, dir);
+      if (next) { view.index += dir; view.rack = next; view.scroll = 0; render(); }
       return;
     }
     const step = e.target.closest('[data-day-step]');
@@ -683,6 +700,7 @@ function openDay(first) {
     const index = new Map(racks.map((r, i) => [r, i]));
     const netName = netNameOf(racks);
     const list = racks.filter(r => r.machine === view.machine).sort((a, b) => a.rack - b.rack);
+    view.rackList = list;
     const nets = list.filter(r => r.net != null);
     const total = nets.length ? nets.reduce((s, r) => s + r.net, 0) : null;
     const average = list.length ? Math.round(list.reduce((s, r) => s + r.games, 0) / list.length) : 0;
@@ -708,7 +726,7 @@ function openDay(first) {
     // 押した行は、いま出している画面の日の台（描いたときの items）から選ぶ。
     onRow: (row, push, view) => {
       const racks = view.items ?? [];
-      if (row.dataset.rack != null) push({kind: 'rack', rack: racks[Number(row.dataset.rack)]});
+      if (row.dataset.rack != null) push(rackPage(racks[Number(row.dataset.rack)], view.rackList));
       else if (row.dataset.machineOf != null) {
         const picked = racks[Number(row.dataset.machineOf)];
         push({kind: 'machine', machine: picked.machine, picked, day: view.day});
@@ -768,7 +786,7 @@ function openIdle() {
     body: (view) => (view.kind === 'idle' ? idleView(view) : rackView(view)),
     // 押した行は、いま出している一覧（描いたときの racks）から選ぶ。
     onRow: (row, push, view) => {
-      if (row.dataset.idleRack != null) push({kind: 'rack', rack: view.racks[Number(row.dataset.idleRack)].latest});
+      if (row.dataset.idleRack != null) push(rackPage(view.racks[Number(row.dataset.idleRack)].latest, view.racks.map(x => x.latest)));
     },
     onChange: (select, view) => {
       if (select.dataset.idle === 'minDays') {
@@ -933,6 +951,7 @@ function openVariety() {
           </button></li>`;
       }).join('')}</ol>` : '<p class="note">候補はありません</p>'}</div>`;
     const marked = report.rows.filter(x => x.rainbowDays > 0);
+    view.weekShown = [...report.noRainbow, ...marked];
     return `<h3 class="candidate-heading">7日間🌈なしの候補</h3><p class="candidate-period">${report.days[0]}〜${report.days.at(-1)}</p>
       <p class="caption">幸町・1台機種。選んだ日を含む7日間に🌈の記録がない台です。70点以上の日がある台も候補に残し、点数を添えます。</p>
       <h4 class="candidate-count">候補 ${report.noRainbow.length}台</h4>
@@ -962,13 +981,15 @@ function openVariety() {
     first,
     body: (view) => (view.kind === 'variety' ? varietyView(view) : rackView(view)),
     onRow: (row, push, view) => {
+      // 前後の台は、画面に並んでいる順（候補は「候補」→「🌈が付いた台」、空き順は空きの長い順）で開ける台だけ。
       if (row.dataset.weekRack != null) {
         const r = view.weekRows[Number(row.dataset.weekRack)]?.openRecord;
-        if (r) push({kind: 'rack', rack: r});
+        if (r) push(rackPage(r, view.weekShown.map(x => x.openRecord).filter(Boolean)));
         return;
       }
       const x = row.dataset.varietyRack != null ? view.rows[Number(row.dataset.varietyRack)] : null;
-      if (x?.open) push({kind: 'rack', rack: x.open});
+      const shown = view.sort === 'gap' ? byLongestGap(view.rows, view.day) : view.rows;
+      if (x?.open) push(rackPage(x.open, shown.map(y => y.open).filter(Boolean)));
     },
     onAction: (button, view) => {
       if (button.dataset.varietyMode) {
@@ -1057,7 +1078,11 @@ function openSuffix() {
     onRow: (row, push, view) => {
       if (row.dataset.suffix != null) push({kind: 'suffixList', day: view.day, period: view.period, suffix: Number(row.dataset.suffix)});
       else if (row.dataset.suffixDay) push({kind: 'suffix', day: row.dataset.suffixDay, period: 'day'});
-      else if (row.dataset.suffixRack != null) push({kind: 'rack', rack: view.entries[Number(row.dataset.suffixRack)]});
+      else if (row.dataset.suffixRack != null) {
+        // 画面は日ごとにまとめて並ぶ。その順で前後の台へ（日の境目では次の日の先頭へ）。
+        const listDays = [...new Set(view.entries.map(r => r.day))];
+        push(rackPage(view.entries[Number(row.dataset.suffixRack)], listDays.flatMap(d => view.entries.filter(r => r.day === d))));
+      }
     },
     onChange: (select, view) => {
       if (select.matches('[data-suffix-period]')) view.period = select.value;
@@ -1223,13 +1248,7 @@ function openEventHistory() {
     view.items=racks;
     return `<p class="store">${esc(storeLabel(location))}　${dateLabel(view.day)}</p><h2 id="sheet-title" class="long">${esc(displayMachineName(view.machine))}</h2><p class="caption">台を押すと、その日のデータを開きます。</p>${racks.length?tapList(racks.map((r,i)=>({lead:'',attrs:`data-history-rack="${i}"`,main:`<span class="machine num" style="display:block">${r.rack}番${rackMark(r)}</span><span class="rack num">BB ${r.bb}・RB ${r.rb}</span>`,right:`${netCell(r)}<span class="small num">${count(r.games)}G</span>`}))):'<p class="note">この日の機種データはありません。</p>'}`;
   };
-  state.historyRedraw=openSheet({first:{kind:'history',type:types[0]}, backOnly:true,
-    // 同じ日・同じ機種の台を台番号の順に。下の台が次の台。
-    rackStep:(view,dir)=>{
-      const r=view.rack, list=(state.model.byDay.get(`${r.store}|${r.day}`)??[]).filter(x=>x.machine===r.machine).sort((a,b)=>a.rack-b.rack);
-      const i=list.findIndex(x=>x.rack===r.rack);
-      return i<0?null:list[i+dir]??null;
-    },
+  state.historyRedraw=openSheet({first:{kind:'history',type:types[0]},
     body:view=>view.kind==='history'?historyView(view):view.kind==='historyMachine'?machineView(view):rackView(view),
     onAction:(action,view)=>{
       if(action.dataset.historyType) { view.type=action.dataset.historyType; view.week=null; }
@@ -1244,7 +1263,7 @@ function openEventHistory() {
     onRow:(row,push,view)=>{
       if(row.dataset.historyRetry!=null) { flushHistoryEdits(); return; }
       if(view.kind==='history' && row.dataset.historyMachine && row.dataset.historyDay) push({kind:'historyMachine',machine:row.dataset.historyMachine,day:row.dataset.historyDay,picked:null});
-      else if(view.kind==='historyMachine' && row.dataset.historyRack!=null) push({kind:'rack',rack:view.items[Number(row.dataset.historyRack)]});
+      else if(view.kind==='historyMachine' && row.dataset.historyRack!=null) push(rackPage(view.items[Number(row.dataset.historyRack)],view.items));
     }});
 }
 
