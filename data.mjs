@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=33e436aac8f8';
+import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=63a1d61c6830';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -125,6 +125,7 @@ export function pscubeRecords(doc) {
       store: `pscube:${raw.store}:${raw.rate}`, day: raw.day, machine: raw.machine, rack,
       games: int(raw.games) ?? 0, bb: int(raw.bb) ?? 0, rb: int(raw.rb) ?? 0, output: int(raw.my),
       net: int(raw.net_medals), needsCheck: false, estimated: false,
+      net_capture:raw.net_capture ?? null,source_site:raw.source_site,
     });
   }
   return result;

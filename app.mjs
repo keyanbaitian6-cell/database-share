@@ -1,4 +1,5 @@
-import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell, historyGradeGap} from './event_history.mjs?v=33e436aac8f8';
+import {updateStatusLines,netHealth} from './capture_health.mjs?v=63a1d61c6830';
+import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell, historyGradeGap} from './event_history.mjs?v=63a1d61c6830';
 // 閲覧専用の共有ページ（お試し、2026-10-09。EVENT_CALENDAR.md「閲覧専用の共有ページ」）。
 // 読むだけのApps Script（database_android/tool/viewer_drive_script_readonly.gs）からDriveのファイルを読み、
 // イベントカレンダー（各日のイベント・総差枚）と、日付を押したときの差枚TOP50（11位からは折りたたみ）・強かった機種10選、
@@ -6,8 +7,8 @@ import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, histor
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=33e436aac8f8';
-import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=33e436aac8f8';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=63a1d61c6830';
+import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=63a1d61c6830';
 import {
   MERUHEN_STORES, calendarDay, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords, lowGamesNote,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
@@ -19,7 +20,7 @@ import {
   varietyWeek, varietyMaxRacksFor, rainbowTodayRows,
   monthDayList, periodWinRate, winRateYears, yearWinRates, loadFailureText,
   characterBirthdayCellLabel, characterBirthdaysOn, parseCharacterBirthdays,
-} from './data.mjs?v=33e436aac8f8';
+} from './data.mjs?v=63a1d61c6830';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -79,7 +80,7 @@ async function getJson(url) {
  */
 async function loadBirthdays() {
   try {
-    const response = await fetch('./character_birthdays.json?v=33e436aac8f8', {credentials: 'omit'});
+    const response = await fetch('./character_birthdays.json?v=63a1d61c6830', {credentials: 'omit'});
     if (!response.ok) return;
     state.birthdays = parseCharacterBirthdays(await response.json());
     if (state.model) render();
@@ -123,6 +124,11 @@ async function load() {
   const saved = await readOfflineMetadata(state.id).catch(() => ({}));
   const metadata = {events: doc(events) || saved.events, pscubeEvents: doc(pscubeEvents) || saved.pscubeEvents,
     rainbow: doc(rainbow) || saved.rainbow, eventHistory: saved.eventHistory};
+  const loadedAt=new Date().toISOString();
+  metadata.health={...saved.health};
+  for(const [site,value] of [['meruhen',m],['pscube',p]]) if(value) metadata.health[site]={
+    loaded_at:loadedAt,exported_at:value.exported_at ?? value.header?.exported_at,
+    sync_status:value.sync_status ?? value.header?.sync_status};
   try {
     const freshHistory = doc(history);
     if (freshHistory) { parsePrivateHistory(freshHistory); metadata.eventHistory = freshHistory; }
@@ -157,7 +163,7 @@ function showDocuments(m, p, metadata = {}) {
   const stores = [...Object.keys(MERUHEN_STORES), ...new Set(records.map(r => r.store).filter(s => s.startsWith('pscube:')))]
     .filter(s => records.some(r => r.store === s));
   state.model = {
-    byDay, stores, marks, summaries: daySummaries(m),
+    byDay, stores, marks, health:metadata.health || {}, summaries: daySummaries(m),
     events: mergeEvents(m?.date_events, metadata.events?.events, p?.date_events, metadata.pscubeEvents?.events),
     exportedAt: [m?.exported_at, p?.exported_at].filter(Boolean).sort().pop() ?? null,
   };
@@ -241,9 +247,34 @@ function render() {
         <div class="grid">${cells}</div>
       </div>
       ${state.notice ? `<p class="legend" role="status">${esc(state.notice)}</p>` : ''}
+      ${healthDetails()}
       <p class="legend">${esc(exportedText(model.exportedAt))}${model.exportedAt ? '。' : ''}差枚＝その日の総差枚（メルヘンは推定）。🎂＝キャラ誕生日（イベントとは別。押すと全員を「名前（作品）」で見られる）。差枚の分かる台が半分に満たない日（アナスロ補完の日など）は勝率＝プラスで終わった台の割合（グラフの終点で判定）。台のデータが無い日の勝率は、保存したアナスロのHTMLから数えたもの（押すと何台中何台プラスか）。＊＝前日までに入力した記録がないイベント。</p>
     </section>`;
 }
+
+function healthDetails() {
+  const model=state.model,site=state.store.startsWith('pscube:') ? 'pscube' : 'meruhen';
+  const meta=model.health[site] || {},days=storeDays(model.byDay,state.store);
+  const day=days.includes(state.healthDay) ? state.healthDay : days[0];
+  const records=(model.byDay.get(`${state.store}|${day}`) || []).map(r=>({...r,net_medals:r.net}));
+  let lines;
+  try {lines=updateStatusLines(meta.sync_status,{exportedAt:meta.exported_at,loadedAt:meta.loaded_at});}
+  catch {lines=['更新工程の情報を読めません。台の記録は表示を続けます。'];}
+  const h=netHealth(records);
+  const report=[`端末内の最新営業日：${days[0] || '記録なし'}`,
+    ...(site==='pscube' ? [`差枚：${h.total}台中${h.known}台取得済み（0枚${h.zero}台）・未取得${h.missing.length}台`,
+      ...h.missing.map(r=>`${r.rack}番 ${r.machine}：${r.reason}`)] : []),
+    '書き出しただけではDriveへのアップロードや他の端末の読み込みは確認できません。'];
+  return `<details class="card" data-health><summary>更新・差枚の取得状況</summary>
+    <p>${esc(storeLabel(state.store))}</p>
+    <label>確認する営業日 <select data-health-day aria-label="取得状況の営業日">${options(days,day,shortDateWeek)}</select></label>
+    ${[...lines,...report].map(line=>`<p class="legend">${esc(line)}</p>`).join('')}</details>`;
+}
+
+app.addEventListener('change',e=>{
+  if(!e.target.matches('[data-health-day]'))return;
+  state.healthDay=e.target.value;render();app.querySelector('[data-health]').open=true;
+});
 
 const count = (n) => n.toLocaleString('en-US');
 /** 確率（1/○○.○）。当たりが0回なら「—」。 */
