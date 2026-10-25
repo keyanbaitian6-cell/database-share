@@ -1,5 +1,6 @@
-import {updateStatusLines,netHealth} from './capture_health.mjs?v=63a1d61c6830';
-import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell, historyGradeGap} from './event_history.mjs?v=63a1d61c6830';
+import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder} from './recommendations.mjs?v=bf9c9db5bf56';
+import {updateStatusLines,netHealth} from './capture_health.mjs?v=bf9c9db5bf56';
+import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell, historyGradeGap} from './event_history.mjs?v=bf9c9db5bf56';
 // 閲覧専用の共有ページ（お試し、2026-10-09。EVENT_CALENDAR.md「閲覧専用の共有ページ」）。
 // 読むだけのApps Script（database_android/tool/viewer_drive_script_readonly.gs）からDriveのファイルを読み、
 // イベントカレンダー（各日のイベント・総差枚）と、日付を押したときの差枚TOP50（11位からは折りたたみ）・強かった機種10選、
@@ -7,8 +8,8 @@ import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, histor
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=63a1d61c6830';
-import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=63a1d61c6830';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=bf9c9db5bf56';
+import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=bf9c9db5bf56';
 import {
   MERUHEN_STORES, calendarDay, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords, lowGamesNote,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
@@ -20,7 +21,7 @@ import {
   varietyWeek, varietyMaxRacksFor, rainbowTodayRows,
   monthDayList, periodWinRate, winRateYears, yearWinRates, loadFailureText,
   characterBirthdayCellLabel, characterBirthdaysOn, parseCharacterBirthdays,
-} from './data.mjs?v=63a1d61c6830';
+} from './data.mjs?v=bf9c9db5bf56';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -80,7 +81,7 @@ async function getJson(url) {
  */
 async function loadBirthdays() {
   try {
-    const response = await fetch('./character_birthdays.json?v=63a1d61c6830', {credentials: 'omit'});
+    const response = await fetch('./character_birthdays.json?v=bf9c9db5bf56', {credentials: 'omit'});
     if (!response.ok) return;
     state.birthdays = parseCharacterBirthdays(await response.json());
     if (state.model) render();
@@ -558,7 +559,7 @@ function openSheet({first, body, onRow, onChange, onAction}) {
       return;
     }
     // 画面の中の切り替え（例：バラエティ🌈の表・空き順）。描き直す。
-    const action = e.target.closest('[data-variety-mode], [data-history-type], [data-history-week-step], [data-history-latest]');
+    const action = e.target.closest('[data-variety-mode], [data-history-type], [data-history-week-step], [data-history-latest], [data-recommendation-retry]');
     if (action && onAction) {
       view.scroll = 0;
       onAction(action, view);
@@ -1168,7 +1169,7 @@ function rememberName(fromLink) {
 
 async function connect(id) {
   if (state.id !== id) {
-    state.model = null; state.eventHistory=null; state.historyDocument=null; state.historySaveNotice='';
+    state.model = null; state.eventHistory=null; state.historyDocument=null; state.historySaveNotice='';state.recommendationNotice='';
     document.querySelectorAll('.sheet-backdrop [data-close]').forEach(e=>e.click());
     state.historyRedraw=null;
     app.innerHTML='<p class="status">保存した記録を読み込んでいます…</p>';
@@ -1242,31 +1243,111 @@ function openBirthdays(first) {
   });
 }
 
+// 4機種の構成はPCの定義を使い、顔文字の未送信分だけを接続先ごとに端末保存する。
+const recommendationSending=new Set();
+function localRecommendationResults(id=state.id) {
+  const text=store.get(`database-share-recommendation-results:${id}`);
+  if(!text)return [];
+  const raw=JSON.parse(text);
+  if(!Array.isArray(raw))throw Error('端末の台別結果を読めません。');
+  return raw;
+}
+function recommendationView(view) {
+  const plans=recommendationPlans(state.historyDocument?.recommendations??[]);
+  if(!plans.some(p=>p.week===view.recWeek))view.recWeek=plans[0].week;
+  const current=plans.find(p=>p.week===view.recWeek),days=recommendationDays(view.recWeek);
+  let cached=[];
+  try{cached=localRecommendationResults();}catch(e){state.recommendationNotice=e.message;}
+  const results=mergeRecommendationResults(state.historyDocument?.recommendation_results??[],cached,{strict:false});
+  const resultIndex=new Map();
+  for(const raw of results)try{const r=recommendationResult(raw);resultIndex.set(recommendationResultKey(r),r);}catch{/* 不正な原文は保存先に残す。 */}
+  const pending=cached.filter(r=>r.pending===true);
+  const records=[...state.model.byDay.values()].flat();view.recRows=[];
+  return `<div class="history-navigation"><label>対象週 <select data-recommendation-week aria-label="4大オススメの対象週">${plans.map(p=>`<option value="${p.week}"${p===current?' selected':''}>${p.week}〜${recommendationDays(p.week)[6]}</option>`).join('')}</select></label></div>
+    <p class="note">機種構成・週の追加はPCで行います。顔文字はここで選んで保存できます。</p>
+    <p class="note" role="status" data-recommendation-status>${esc(state.recommendationNotice||(pending.length?'顔文字は端末に保存済み、共有への送信待ちです。':state.historyDocument?.recommendation_results_editing?'顔文字を選ぶと共有へ保存します。':'顔文字は端末に保存できます。共有するには閲覧・共有用Apps Scriptの更新が必要です。'))}</p>
+    ${pending.length?'<button type="button" class="pill pill-outline" data-recommendation-retry>未送信の顔文字を再送</button>':''}
+    ${current.machines.map((machine,slot)=>{
+      const rows=recommendationRows(records,view.recWeek,machine);
+      return `<section class="history-week recommendation-card"><h3>${esc(displayMachineName(machine))}</h3>
+      <div class="history-overflow"><table class="recommendation-table"><thead><tr><th>台番号</th>${days.map((d,i)=>`<th>${'月火水木金土日'[i]}<small>${d.slice(5)}</small></th>`).join('')}</tr></thead><tbody>${rows.map(row=>`<tr><th scope="row">${row.rack}番</th>${row.cells.map((r,i)=>{
+        const at=view.recRows.length;if(r)view.recRows.push(r);
+        const value=r?.net,fields={store:'nagamachiminami',week:current.week,machine,rack:row.rack,day:days[i]},saved=resultIndex.get(recommendationResultKey(fields));
+        const choice=saved?.value==null?'auto':saved.value,face=choice==='auto'?recommendationFace(value):choice;
+        return `<td><select class="recommendation-face" data-recommendation-result="${esc(encodeURIComponent(JSON.stringify(fields)))}" aria-label="${days[i]} ${row.rack}番の顔文字">${['auto','',...RECOMMENDATION_FACES].map(f=>`<option value="${f}"${f===choice?' selected':''}>${f==='auto'?`${recommendationFace(value)||'—'} 自動`:f||'空欄'}</option>`).join('')}</select>${r?`<button type="button" class="row recommendation-cell" data-recommendation-rack="${at}" aria-label="${days[i]} ${row.rack}番のデータを開く">`:'<span class="recommendation-cell">'}<small class="num ${value==null?'zero':tone(value)}">${value==null?'—':`${r.estimated?'約':''}${signed(value)}`}</small>${r?'</button>':'</span>'}</td>`;
+      }).join('')}</tr>`).join('')}</tbody></table></div>${rows.length?'':'<p class="note">この週の保存データはまだありません。</p>'}</section>`;
+    }).join('')}
+    <p class="note">「自動」は台ごとの差枚で判定：3,000枚以上😍 · 1,000枚以上😀 · 0枚以上😌 · マイナス🥶 · 不明—。約は推定差枚です。顔文字だけ手動で変更でき、差枚は変更しません。</p>`;
+}
+function queueRecommendationResult(field) {
+  try {
+    const fields=JSON.parse(decodeURIComponent(field.dataset.recommendationResult)),key=recommendationResultKey(fields),local=localRecommendationResults();
+    let now=Date.now();
+    for(const r of [...(state.historyDocument?.recommendation_results??[]),...local])if(recommendationResultKey(r)===key&&Number.isFinite(Date.parse(r.updated_at)))now=Math.max(now,Date.parse(r.updated_at)+1);
+    if(now>Date.now()+5*60*1000)throw Error('共有済みの編集時刻が未来です。端末の日時を確認してください。');
+    const entry=recommendationResult({...fields,value:field.value==='auto'?null:field.value,updated_at:new Date(now).toISOString(),device:'shared'});
+    const pending=local.filter(r=>recommendationResultKey(r)!==key);pending.push({...entry,pending:true});
+    if(pending.length>30000)throw Error('端末の結果一覧が上限に達しています。');
+    localStorage.setItem(`database-share-recommendation-results:${state.id}`,JSON.stringify(pending));
+    state.recommendationNotice='顔文字を端末に保存しました。共有への送信待ちです。';
+    flushRecommendationResults();
+  }catch(e){state.recommendationNotice=`顔文字を保存できません：${e.message}`;}
+}
+async function flushRecommendationResults() {
+  const id=state.id,key=`database-share-recommendation-results:${id}`;
+  if(recommendationSending.has(id))return;
+  if(!state.historyDocument?.recommendation_results_editing){state.recommendationNotice='顔文字は端末に保存済みです。共有するには閲覧・共有用Apps Scriptを更新し「最新を読む」後に再送してください。';state.historyRedraw?.();return;}
+  recommendationSending.add(id);
+  try {
+    while(state.id===id) {
+      const pending=localRecommendationResults(id).filter(r=>r.pending===true).slice(0,100);if(!pending.length)break;
+      const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),TIMEOUT_MS);let answer;
+      try {
+        const response=await fetch(`https://script.google.com/macros/s/${id}/exec`,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({file:'event-history',cells:[],recommendation_results:pending}),signal:controller.signal});
+        if(!response.ok)throw Error(`共有へ送信できません（${response.status}）。`);
+        answer=await response.json();
+      }finally{clearTimeout(timer);}
+      if(!answer.ok||!answer.history?.recommendation_results_editing)throw Error(answer.error||'共有の保存確認ができませんでした。');
+      const returned=mergeRecommendationResults(answer.history.recommendation_results??[],[],{strict:false});
+      for(const r of pending)if(!returned.some(v=>recommendationResultKey(v)===recommendationResultKey(r)&&recommendationNotOlder(v,r)))throw Error('共有の保存確認ができませんでした。');
+      const remaining=localRecommendationResults(id).map(r=>{
+        if(!pending.some(sent=>JSON.stringify(sent)===JSON.stringify(r)))return r;
+        const saved=returned.find(v=>recommendationResultKey(v)===recommendationResultKey(r)&&recommendationNotOlder(v,r));
+        return {...saved,pending:false};
+      });
+      localStorage.setItem(key,JSON.stringify(remaining));
+      if(state.id===id){state.historyDocument=answer.history;state.eventHistory=parsePrivateHistory(mergeHistoryCells(answer.history,localHistoryEdits(id),{strict:false}));state.recommendationNotice=remaining.some(r=>r.pending===true)?'残りの顔文字を送信中です。':'顔文字を共有へ保存しました。';}
+    }
+  }catch(e){state.recommendationNotice=`顔文字は共有への送信待ちです。端末には残っています。${e.message}`;}
+  finally{recommendationSending.delete(id);if(state.id===id)state.historyRedraw?.();}
+}
+
 /** 画像から記録した長町南のイベント履歴。記号は意味付けせず、同日の機種一覧へつなぐ。 */
 function openEventHistory() {
   if (!['nagamachiminami','saiwaichou'].includes(state.store)) return;
   const location=state.store, saiwaichou=location==='saiwaichou';
-  const types=saiwaichou?['バラエティ']:HISTORY_TYPES;
+  const types=saiwaichou?['バラエティ']:[...HISTORY_TYPES,RECOMMENDATION_TYPE];
   let varietyModel;
   if(saiwaichou) {
     if(!state.historyDocument?.saiwaichou_variety) { toast('PCで幸町のバラエティ履歴を共有へ反映してください。');return; }
     try { varietyModel=parsePrivateHistory(state.historyDocument.saiwaichou_variety,location); }
     catch(error) { toast(`幸町の履歴を読めません：${error.message}`);return; }
   }
-  if (!state.eventHistory) {
-    toast(state.historyNotice || '履歴がまだありません。PCで共有へ反映し、Apps Scriptを更新してから再読み込みしてください。'); return;
+  if (!state.eventHistory && saiwaichou) {
+    toast(state.historyNotice || '履歴がまだありません。PCで共有へ反映してください。'); return;
   }
   const index = new Map();
   for (const [key, records] of state.model.byDay) {
     if (key.startsWith(location+'|')) index.set(key.slice(location.length+1), new Set(records.map(r=>r.machine)));
   }
   const historyView = view => {
-    const model=saiwaichou?varietyModel:state.eventHistory;
+    const model=(saiwaichou?varietyModel:state.eventHistory)??{weeks:[],symbols:[]};
     const weeks = model.weeks.filter(w=>w.type===view.type).sort((a,b)=>b.from.localeCompare(a.from));
     if (!weeks.some(w=>w.from===view.week)) view.week=weeks[0]?.from;
     const selected=weeks.find(w=>w.from===view.week), weekIndex=weeks.indexOf(selected);
     const lastRecordDay=selected?[...index.keys()].filter(d=>d>=selected.from&&d<=selected.to).sort().at(-1):null;
     const heading = `<h2 id="sheet-title">${saiwaichou?'幸町のバラエティ履歴':'長町南のイベント履歴'}</h2><div class="history-types">${types.map(t=>`<button type="button" class="pill ${t===view.type?'':'pill-outline'}" data-history-type="${esc(t)}" aria-pressed="${t===view.type}">${esc(t)}</button>`).join('')}</div>`;
+    if(view.type===RECOMMENDATION_TYPE) return heading+recommendationView(view);
     let pending=0;
     try { if(!saiwaichou) pending=localHistoryEdits().filter(c=>c.pending===true).length; } catch { /* 読み込み時の警告を表示する。 */ }
     const notice = (state.historyNotice ? `<p class="note">${esc(state.historyNotice)}</p>` : '')
@@ -1306,16 +1387,23 @@ function openEventHistory() {
     body:view=>view.kind==='history'?historyView(view):view.kind==='historyMachine'?machineView(view):rackView(view),
     onAction:(action,view)=>{
       if(action.dataset.historyType) { view.type=action.dataset.historyType; view.week=null; }
-      const weeks=(saiwaichou?varietyModel:state.eventHistory).weeks.filter(w=>w.type===view.type).sort((a,b)=>b.from.localeCompare(a.from));
+      if(view.type===RECOMMENDATION_TYPE) {
+        if(action.dataset.recommendationRetry!=null)flushRecommendationResults();
+        return;
+      }
+      const weeks=((saiwaichou?varietyModel:state.eventHistory)?.weeks??[]).filter(w=>w.type===view.type).sort((a,b)=>b.from.localeCompare(a.from));
       if(action.dataset.historyWeekStep) view.week=weeks[weeks.findIndex(w=>w.from===view.week)+Number(action.dataset.historyWeekStep)]?.from??view.week;
       if(action.dataset.historyLatest!=null) view.week=weeks[0]?.from;
     },
     onChange:(field,view)=>{
+      if(field.matches('[data-recommendation-week]')) {view.recWeek=field.value;view.scroll=0;}
+      if(field.matches('[data-recommendation-result]'))queueRecommendationResult(field);
       if(field.matches('[data-history-edit]')) queueHistoryEdit(field);
       if(field.matches('[data-history-week]')) { view.week=field.value; view.scroll=0; }
     },
     onRow:(row,push,view)=>{
       if(row.dataset.historyRetry!=null) { flushHistoryEdits(); return; }
+      if(row.dataset.recommendationRack!=null) {const r=view.recRows[Number(row.dataset.recommendationRack)];push(rackPage(r,view.recRows));return;}
       if(view.kind==='history' && row.dataset.historyMachine && row.dataset.historyDay) push({kind:'historyMachine',machine:row.dataset.historyMachine,day:row.dataset.historyDay,picked:null,names:view.dayNames?.[row.dataset.historyDay],namesDay:row.dataset.historyDay});
       else if(view.kind==='historyMachine' && row.dataset.historyRack!=null) push(rackPage(view.items[Number(row.dataset.historyRack)],view.rackOrder));
     }});
