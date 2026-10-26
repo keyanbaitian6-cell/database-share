@@ -17,17 +17,25 @@ const normal=n=>n.replaceAll('+',' ').replace(/\s+/g,'').toLowerCase();
 export function recommendationPlan(raw) {
   if(!raw||raw.store!=='nagamachiminami'||!Array.isArray(raw.machines)||raw.machines.length!==4||raw.machines.some(n=>!validName(n))||new Set(raw.machines.map(normal)).size!==4) throw Error('異なる4機種を選んでください。');
   recommendationWeek(raw.week);
-  if(typeof raw.updated_at!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(raw.updated_at)||!Number.isFinite(Date.parse(raw.updated_at))) throw Error('4機種の編集時刻が不正です。');
+  if(typeof raw.updated_at!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(raw.updated_at)) throw Error('4機種の編集時刻が不正です。');
   const at=raw.updated_at.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/);
   const date=new Date(at[1]+'T00:00:00Z');
   if(!Number.isFinite(+date)||date.toISOString().slice(0,10)!==at[1]||at[1].startsWith('0000')||+at[2]>23||+at[3]>59||+at[4]>59||(at[5]!=='Z'&&(+at[5].slice(1,3)>23||+at[5].slice(4,6)>59)))throw Error('4機種の編集時刻が不正です。');
   return {store:raw.store,week:raw.week,machines:[...raw.machines],updated_at:raw.updated_at,device:['pc','android','shared'].includes(raw.device)?raw.device:'pc'};
 }
 // 小数秒6桁の編集順を落とさず比較する（Apps Scriptの生成時にも使用）。
-const time=p=>{
-  const m=p.updated_at.match(/\.(\d{1,6})(?=Z|[+-])/);
-  return BigInt(Math.floor(Date.parse(p.updated_at)/1000))*1000000n+BigInt((m?.[1]??'').padEnd(6,'0'));
+const recommendationStamp = s => {
+  const m = typeof s === 'string' && /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?(Z|[+-]\d{2}:\d{2})$/.exec(s);
+  if (!m || +m[2]>23 || +m[3]>59 || +m[4]>59) throw Error('履歴の編集時刻が不正です。');
+  let offset=0;
+  if(m[6]!=='Z'){
+    const h=+m[6].slice(1,3), n=+m[6].slice(4,6);
+    if(h>23 || n>59) throw Error('履歴の時差が不正です。');
+    offset=(h*60+n)*(m[6][0]==='+'?1:-1);
+  }
+  return BigInt(Date.parse(m[1]+'T00:00:00Z')+(+m[2]*3600 + +m[3]*60 + +m[4]-offset*60)*1000)*1000n + BigInt((m[5]??'').padEnd(6,'0'));
 };
+const time=p=>recommendationStamp(p.updated_at);
 export function mergeRecommendations(stored=[],incoming=[],{strict=true}={}) {
   if(!Array.isArray(stored)||!Array.isArray(incoming)||stored.length>3000||incoming.length>3000) throw Error('4機種の週一覧が不正です。');
   const plans=new Map(),orphans=[];
@@ -66,7 +74,7 @@ export function recommendationFace(net) {
 }
 
 export const RECOMMENDATION_FACES=['😀','😍','🥶','😌','😇'];
-export const recommendationResultKey=r=>JSON.stringify([r.store,r.week,r.machine,r.rack,r.day]);
+export const recommendationResultKey=r=>JSON.stringify([r?.store,r?.week,r?.machine,r?.rack,r?.day]);
 export function recommendationResult(raw) {
   if(!raw||typeof raw!=='object'||!['store','week','machine','rack','day','value','updated_at'].every(k=>Object.hasOwn(raw,k)))throw Error('台ごとの顔文字が不正です。');
   // 店舗・週・時刻の検証は構成と同じ。結果から機種構成を変更することはない。
@@ -92,3 +100,5 @@ export function recommendationResultValue(results,fields,automatic) {
 }
 
 export const recommendationNotOlder=(a,b)=>time(a)>=time(b);
+
+export const recommendationEditMs=r=>Number(time(recommendationResult(r)) / 1000n);

@@ -1,6 +1,6 @@
-import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder} from './recommendations.mjs?v=6aa7821ec110';
-import {updateStatusLines,netHealth} from './capture_health.mjs?v=6aa7821ec110';
-import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell, historyGradeGap} from './event_history.mjs?v=6aa7821ec110';
+import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=d07a6791739b';
+import {updateStatusLines,netHealth} from './capture_health.mjs?v=d07a6791739b';
+import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell, historyGradeGap} from './event_history.mjs?v=d07a6791739b';
 // 閲覧専用の共有ページ（お試し、2026-10-09。EVENT_CALENDAR.md「閲覧専用の共有ページ」）。
 // 読むだけのApps Script（database_android/tool/viewer_drive_script_readonly.gs）からDriveのファイルを読み、
 // イベントカレンダー（各日のイベント・総差枚）と、日付を押したときの差枚TOP50（11位からは折りたたみ）・強かった機種10選、
@@ -8,8 +8,8 @@ import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, histor
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=6aa7821ec110';
-import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=6aa7821ec110';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=d07a6791739b';
+import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=d07a6791739b';
 import {
   MERUHEN_STORES, calendarDay, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords, lowGamesNote,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
@@ -21,7 +21,7 @@ import {
   varietyWeek, varietyMaxRacksFor, rainbowTodayRows,
   monthDayList, periodWinRate, winRateYears, yearWinRates, loadFailureText,
   characterBirthdayCellLabel, characterBirthdaysOn, parseCharacterBirthdays,
-} from './data.mjs?v=6aa7821ec110';
+} from './data.mjs?v=d07a6791739b';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -81,7 +81,7 @@ async function getJson(url) {
  */
 async function loadBirthdays() {
   try {
-    const response = await fetch('./character_birthdays.json?v=6aa7821ec110', {credentials: 'omit'});
+    const response = await fetch('./character_birthdays.json?v=d07a6791739b', {credentials: 'omit'});
     if (!response.ok) return;
     state.birthdays = parseCharacterBirthdays(await response.json());
     if (state.model) render();
@@ -1245,6 +1245,7 @@ function openBirthdays(first) {
 
 // 4機種の構成はPCの定義を使い、顔文字の未送信分だけを接続先ごとに端末保存する。
 const recommendationSending=new Set();
+function validRecommendationResult(raw) {try {recommendationResult(raw);return true;}catch{return false;}}
 function localRecommendationResults(id=state.id) {
   const text=store.get(`database-share-recommendation-results:${id}`);
   if(!text)return [];
@@ -1261,7 +1262,7 @@ function recommendationView(view) {
   const results=mergeRecommendationResults(state.historyDocument?.recommendation_results??[],cached,{strict:false});
   const resultIndex=new Map();
   for(const raw of results)try{const r=recommendationResult(raw);resultIndex.set(recommendationResultKey(r),r);}catch{/* 不正な原文は保存先に残す。 */}
-  const pending=cached.filter(r=>r.pending===true);
+  const pending=cached.filter(r=>r?.pending===true&&validRecommendationResult(r));
   const records=[...state.model.byDay.values()].flat();view.recRows=[];
   return `<div class="history-navigation"><label>対象週 <select data-recommendation-week aria-label="4大オススメの対象週">${plans.map(p=>`<option value="${p.week}"${p===current?' selected':''}>${p.week}〜${recommendationDays(p.week)[6]}</option>`).join('')}</select></label></div>
     <p class="note">機種構成・週の追加はPCで行います。顔文字はここで選んで保存できます。</p>
@@ -1283,7 +1284,10 @@ function queueRecommendationResult(field) {
   try {
     const fields=JSON.parse(decodeURIComponent(field.dataset.recommendationResult)),key=recommendationResultKey(fields),local=localRecommendationResults();
     let now=Date.now();
-    for(const r of [...(state.historyDocument?.recommendation_results??[]),...local])if(recommendationResultKey(r)===key&&Number.isFinite(Date.parse(r.updated_at)))now=Math.max(now,Date.parse(r.updated_at)+1);
+    for(const r of [...(state.historyDocument?.recommendation_results??[]),...local]) {
+      try {if(recommendationResultKey(r)===key)now=Math.max(now,recommendationEditMs(r)+1);}
+      catch { /* 不正な原文は残し、有効な編集だけを時刻比較する。 */ }
+    }
     if(now>Date.now()+5*60*1000)throw Error('共有済みの編集時刻が未来です。端末の日時を確認してください。');
     const entry=recommendationResult({...fields,value:field.value==='auto'?null:field.value,updated_at:new Date(now).toISOString(),device:'shared'});
     const pending=local.filter(r=>recommendationResultKey(r)!==key);pending.push({...entry,pending:true});
@@ -1300,7 +1304,7 @@ async function flushRecommendationResults() {
   recommendationSending.add(id);
   try {
     while(state.id===id) {
-      const pending=localRecommendationResults(id).filter(r=>r.pending===true).slice(0,100);if(!pending.length)break;
+      const pending=localRecommendationResults(id).filter(r=>r?.pending===true&&validRecommendationResult(r)).slice(0,100);if(!pending.length)break;
       const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),TIMEOUT_MS);let answer;
       try {
         const response=await fetch(`https://script.google.com/macros/s/${id}/exec`,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({file:'event-history',cells:[],recommendation_results:pending}),signal:controller.signal});
@@ -1316,7 +1320,7 @@ async function flushRecommendationResults() {
         return {...saved,pending:false};
       });
       localStorage.setItem(key,JSON.stringify(remaining));
-      if(state.id===id){state.historyDocument=answer.history;state.eventHistory=parsePrivateHistory(mergeHistoryCells(answer.history,localHistoryEdits(id),{strict:false}));state.recommendationNotice=remaining.some(r=>r.pending===true)?'残りの顔文字を送信中です。':'顔文字を共有へ保存しました。';}
+      if(state.id===id){state.historyDocument=answer.history;state.eventHistory=parsePrivateHistory(mergeHistoryCells(answer.history,localHistoryEdits(id),{strict:false}));state.recommendationNotice=remaining.some(r=>r?.pending===true&&validRecommendationResult(r))?'残りの顔文字を送信中です。':'顔文字を共有へ保存しました。';}
     }
   }catch(e){state.recommendationNotice=`顔文字は共有への送信待ちです。端末には残っています。${e.message}`;}
   finally{recommendationSending.delete(id);if(state.id===id)state.historyRedraw?.();}
