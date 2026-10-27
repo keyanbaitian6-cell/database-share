@@ -1,6 +1,6 @@
-import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=04fb305d7f75';
-import {updateStatusLines,netHealth} from './capture_health.mjs?v=04fb305d7f75';
-import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell, historyGradeGap} from './event_history.mjs?v=04fb305d7f75';
+import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=9e71cbc21080';
+import {updateStatusLines,netHealth} from './capture_health.mjs?v=9e71cbc21080';
+import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell, historyGradeGap} from './event_history.mjs?v=9e71cbc21080';
 // 閲覧専用の共有ページ（お試し、2026-10-09。EVENT_CALENDAR.md「閲覧専用の共有ページ」）。
 // 読むだけのApps Script（database_android/tool/viewer_drive_script_readonly.gs）からDriveのファイルを読み、
 // イベントカレンダー（各日のイベント・総差枚）と、日付を押したときの差枚TOP50（11位からは折りたたみ）・強かった機種10選、
@@ -8,8 +8,8 @@ import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, histor
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=04fb305d7f75';
-import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=04fb305d7f75';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=9e71cbc21080';
+import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=9e71cbc21080';
 import {
   MERUHEN_STORES, calendarDay, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords, lowGamesNote,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
@@ -21,7 +21,7 @@ import {
   varietyWeek, varietyMaxRacksFor, rainbowTodayRows,
   monthDayList, periodWinRate, winRateYears, yearWinRates, loadFailureText,
   characterBirthdayCellLabel, characterBirthdaysOn, parseCharacterBirthdays,
-} from './data.mjs?v=04fb305d7f75';
+} from './data.mjs?v=9e71cbc21080';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -81,7 +81,7 @@ async function getJson(url) {
  */
 async function loadBirthdays() {
   try {
-    const response = await fetch('./character_birthdays.json?v=04fb305d7f75', {credentials: 'omit'});
+    const response = await fetch('./character_birthdays.json?v=9e71cbc21080', {credentials: 'omit'});
     if (!response.ok) return;
     state.birthdays = parseCharacterBirthdays(await response.json());
     if (state.model) render();
@@ -1275,7 +1275,9 @@ function recommendationView(view) {
         const at=view.recRows.length;if(r)view.recRows.push(r);
         const value=r?.net,fields={store:'nagamachiminami',week:current.week,machine,rack:row.rack,day:days[i]},saved=resultIndex.get(recommendationResultKey(fields));
         const choice=saved?.value==null?'auto':saved.value,face=choice==='auto'?recommendationFace(value):choice;
-        return `<td><select class="recommendation-face" data-recommendation-result="${esc(encodeURIComponent(JSON.stringify(fields)))}" aria-label="${days[i]} ${row.rack}番の顔文字">${['auto','',...RECOMMENDATION_FACES].map(f=>`<option value="${f}"${f===choice?' selected':''}>${f==='auto'?`${recommendationFace(value)||'—'} 自動`:f||'空欄'}</option>`).join('')}</select>${r?`<button type="button" class="row recommendation-cell" data-recommendation-rack="${at}" aria-label="${days[i]} ${row.rack}番のデータを開く">`:'<span class="recommendation-cell">'}<small class="num ${value==null?'zero':tone(value)}">${value==null?'—':`${r.estimated?'約':''}${signed(value)}`}</small>${r?'</button>':'</span>'}</td>`;
+        // 欄には顔文字だけを出し、透明の選択欄を上に重ねる。選択欄の文字（「😌 自動」）と矢印は1列（約40px）に
+        // 収まらず、iPhoneで顔文字が見切れていた（2026-10-27）。押すと今までどおり選択肢が出る。
+        return `<td><span class="recommendation-pick"><span class="recommendation-face-shown" aria-hidden="true">${face||'—'}<span class="recommendation-caret">▾</span></span><select class="recommendation-face" data-recommendation-result="${esc(encodeURIComponent(JSON.stringify(fields)))}" aria-label="${days[i]} ${row.rack}番の顔文字">${['auto','',...RECOMMENDATION_FACES].map(f=>`<option value="${f}"${f===choice?' selected':''}>${f==='auto'?`${recommendationFace(value)||'—'} 自動`:f||'空欄'}</option>`).join('')}</select></span>${r?`<button type="button" class="row recommendation-cell" data-recommendation-rack="${at}" aria-label="${days[i]} ${row.rack}番のデータを開く">`:'<span class="recommendation-cell">'}<small class="num ${value==null?'zero':tone(value)}">${value==null?'—':`${r.estimated?'約':''}${signed(value)}`}</small>${r?'</button>':'</span>'}</td>`;
       }).join('')}</tr>`).join('')}</tbody></table></div>${rows.length?'':'<p class="note">この週の保存データはまだありません。</p>'}</section>`;
     }).join('')}
     <p class="note">「自動」は台ごとの差枚で判定：3,000枚以上😍 · 1,000枚以上😀 · 0枚以上😌 · マイナス🥶 · 不明—。約は推定差枚です。顔文字だけ手動で変更でき、差枚は変更しません。</p>`;
