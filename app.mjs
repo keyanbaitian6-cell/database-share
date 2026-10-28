@@ -1,6 +1,6 @@
-import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=e012d00cda18';
-import {updateStatusLines,netHealth} from './capture_health.mjs?v=e012d00cda18';
-import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell, historyGradeGap} from './event_history.mjs?v=e012d00cda18';
+import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=9b704b8056a2';
+import {updateStatusLines,netHealth} from './capture_health.mjs?v=9b704b8056a2';
+import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=9b704b8056a2';
 // 閲覧専用の共有ページ（お試し、2026-10-09。EVENT_CALENDAR.md「閲覧専用の共有ページ」）。
 // 読むだけのApps Script（database_android/tool/viewer_drive_script_readonly.gs）からDriveのファイルを読み、
 // イベントカレンダー（各日のイベント・総差枚）と、日付を押したときの差枚TOP50（11位からは折りたたみ）・強かった機種10選、
@@ -8,8 +8,8 @@ import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, histor
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=e012d00cda18';
-import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=e012d00cda18';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=9b704b8056a2';
+import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=9b704b8056a2';
 import {
   MERUHEN_STORES, calendarDay, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords, lowGamesNote,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
@@ -19,9 +19,10 @@ import {
   ROTATION_DAYS, byLongestGap, daysSinceRainbow, rackDays, rainbowVarietyMax, windowDays,
   SUFFIX_PERIODS, hasSuffixSummary, suffixesOf, zoromeEndingsOf, suffixLabel, suffixReport,
   varietyWeek, varietyMaxRacksFor, rainbowTodayRows,
+  SAIWAICHOU_GAP_NET, saiwaichouMachineNet, saiwaichouGrade, saiwaichouGapEnd, saiwaichouGap,
   monthDayList, periodWinRate, winRateYears, yearWinRates, loadFailureText,
   characterBirthdayCellLabel, characterBirthdaysOn, parseCharacterBirthdays,
-} from './data.mjs?v=e012d00cda18';
+} from './data.mjs?v=9b704b8056a2';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -81,7 +82,7 @@ async function getJson(url) {
  */
 async function loadBirthdays() {
   try {
-    const response = await fetch('./character_birthdays.json?v=e012d00cda18', {credentials: 'omit'});
+    const response = await fetch('./character_birthdays.json?v=9b704b8056a2', {credentials: 'omit'});
     if (!response.ok) return;
     state.birthdays = parseCharacterBirthdays(await response.json());
     if (state.model) render();
@@ -1346,18 +1347,36 @@ function openEventHistory() {
   for (const [key, records] of state.model.byDay) {
     if (key.startsWith(location+'|')) index.set(key.slice(location.length+1), new Set(records.map(r=>r.machine)));
   }
+  // 幸町：機種のその日の合計差枚（全台・週表の台数と一致するときだけ）。
+  const machineNet=(item,day)=>{
+    const name=historySavedName(item,index.get(day)??new Set());
+    return name?saiwaichouMachineNet((state.model.byDay.get(`${location}|${day}`)??[]).filter(r=>r.machine===name),item.count):null;
+  };
+  // 手入力の優・良（赤字の判定用。前週にまたがる日も同じ機種名・明示的な保存名の週表から探す）。
+  const savedGrade=(item,day)=>{
+    for(const w of varietyModel.weeks) {
+      if(day<w.from||day>w.to) continue;
+      const m=w.machines.find(m=>m.name===item.name||(item.record_name&&m.record_name===item.record_name));
+      if(m) return m.results[Math.round((Date.parse(`${day}T00:00:00Z`)-Date.parse(`${w.from}T00:00:00Z`))/86400000)];
+    }
+    return '';
+  };
+  // 空欄のマスは差枚から優・良を自動で表示する（2026-10-29 利用者指定、保存しない）。
+  const autoModel=saiwaichou?{...varietyModel,weeks:varietyModel.weeks.map(w=>({...w,machines:w.machines.map(m=>({...m,
+    results:m.results.map((v,i)=>v||saiwaichouGrade(machineNet(m,historyDay(w.from,i)))) }))}))}:null;
   const historyView = view => {
-    const model=(saiwaichou?varietyModel:state.eventHistory)??{weeks:[],symbols:[]};
+    const model=(saiwaichou?autoModel:state.eventHistory)??{weeks:[],symbols:[]};
     const weeks = model.weeks.filter(w=>w.type===view.type).sort((a,b)=>b.from.localeCompare(a.from));
     if (!weeks.some(w=>w.from===view.week)) view.week=weeks[0]?.from;
     const selected=weeks.find(w=>w.from===view.week), weekIndex=weeks.indexOf(selected);
     const lastRecordDay=selected?[...index.keys()].filter(d=>d>=selected.from&&d<=selected.to).sort().at(-1):null;
+    const gapEnd=saiwaichou?saiwaichouGapEnd(lastRecordDay):null;
     const heading = `<h2 id="sheet-title">${saiwaichou?'幸町のバラエティ履歴':'長町南のイベント履歴'}</h2><div class="history-types">${types.map(t=>`<button type="button" class="pill ${t===view.type?'':'pill-outline'}" data-history-type="${esc(t)}" aria-pressed="${t===view.type}">${esc(t)}</button>`).join('')}</div>`;
     if(view.type===RECOMMENDATION_TYPE) return heading+recommendationView(view);
     let pending=0;
     try { if(!saiwaichou) pending=localHistoryEdits().filter(c=>c.pending===true).length; } catch { /* 読み込み時の警告を表示する。 */ }
     const notice = (state.historyNotice ? `<p class="note">${esc(state.historyNotice)}</p>` : '')
-      + `<p class="note" role="status" data-history-save-status>${esc(saiwaichou?'優・良の入力・修正はPCで行います。':state.historyDocument?.shared_editing?(state.historySaveNotice||'顔文字を選ぶと共有へ保存します。'):'記号を編集するには共有用Apps Scriptを更新してから読み込み直してください。')}</p>`
+      + `<p class="note" role="status" data-history-save-status>${esc(saiwaichou?'優・良は差枚から自動で表示します。手入力・修正はPCで行います。':state.historyDocument?.shared_editing?(state.historySaveNotice||'顔文字を選ぶと共有へ保存します。'):'記号を編集するには共有用Apps Scriptを更新してから読み込み直してください。')}</p>`
       + (pending?`<button type="button" class="pill pill-outline" data-history-retry>未送信${count(pending)}件を再送する</button>`:'');
     const rejected = model.rejected ? `<p class="note">形式が合わない編集${count(model.rejected)}件を表示していません。</p>` : '';
     if (!weeks.length) return `${heading}${notice}<p class="note">この種別の週表はまだありません。</p>`;
@@ -1367,19 +1386,19 @@ function openEventHistory() {
       <select id="history-week-select" data-history-week aria-label="対象週">${weeks.map(w=>`<option value="${w.from}"${w===selected?' selected':''}>${esc(w.from)} 〜 ${esc(w.to)}</option>`).join('')}</select>
       <button type="button" class="pill pill-outline" data-history-week-step="-1" aria-label="次の週"${weekIndex<=0?' disabled':''}>›</button></div>
       <div class="history-week-meta"><span>${selected.machines.length}機種 · ${weekIndex+1} / ${weeks.length}週</span><button type="button" class="history-latest" data-history-latest${weekIndex===0?' disabled':''}>最新の週へ</button></div>
-      ${saiwaichou?`<p class="history-gap-note">${lastRecordDay?`赤字：${esc(lastRecordDay)}までの5暦日、優・良なし（空欄の日を含む）`:'この週は記録がないため赤字判定はしません。'}</p>`:''}</div>`;
+      ${saiwaichou?`<p class="history-gap-note">${gapEnd?`赤字：${esc(gapEnd)}までの5日間、+${SAIWAICHOU_GAP_NET}枚超えなし（今日を除く）`:'この週は記録がないため赤字判定はしません。'}</p>`:''}</div>`;
     return `${heading}${navigation}${notice}${rejected}${[selected].map(w=>{
       const days=Array.from({length:7},(_,i)=>historyDay(w.from,i));
       // 日ごとの、表の上から下の順の機種（記録のある機種だけ）。開いた画面から「次の機種」「次の台」で下の行へ送るため（2026-10-22 利用者）。
       view.dayNames=Object.fromEntries(days.map(d=>[d,[...new Set(w.machines.map(item=>historySavedName(item,index.get(d)??new Set())).filter(Boolean))]]));
-      const rows=w.machines.map(item=>`<tr><th scope="row"><span${saiwaichou&&historyGradeGap(model.weeks,item,lastRecordDay)?' class="history-grade-gap"':!saiwaichou&&w.type==='バラエティ'&&!item.results.includes('😍')?' class="history-no-heart"':''}>${esc(displayMachineName(item.name))}</span><small>${count(item.count)}台</small></th>${days.map((d,i)=>{
+      const rows=w.machines.map(item=>`<tr><th scope="row"><span${saiwaichou&&saiwaichouGap(gapEnd,d=>({net:machineNet(item,d),grade:savedGrade(item,d)}))?' class="history-grade-gap"':!saiwaichou&&w.type==='バラエティ'&&!item.results.includes('😍')?' class="history-no-heart"':''}>${esc(displayMachineName(item.name))}</span><small>${count(item.count)}台</small></th>${days.map((d,i)=>{
         const name=historySavedName(item,index.get(d)??new Set());
         const key=encodeURIComponent(JSON.stringify({type:w.type,week:w.from,machine:item.name,day:d}));
         const result=saiwaichou?`<span class="history-symbol ${item.results[i]==='優'?'history-excellent':item.results[i]==='良'?'history-good':'history-empty'}">${esc(item.results[i]||'—')}</span>`:`<select class="history-symbol" data-history-edit="${esc(key)}"${state.historyDocument?.shared_editing?'':' disabled'} aria-label="${esc(d)} ${esc(displayMachineName(item.name))}の結果">${['',...model.symbols].map(s=>`<option value="${esc(s)}"${s===item.results[i]?' selected':''}>${esc(s||'—')}</option>`).join('')}</select>`;
         return `<td><span class="history-mobile-day" aria-hidden="true">${'月火水木金土日'[i]}<small>${d.slice(8)}</small></span>${result}${name ? `<button type="button" class="row history-cell" data-history-machine="${esc(name)}" data-history-day="${d}" aria-label="${esc(d)} ${esc(name)}のデータを開く"><span class="history-open-label">開く </span>↗</button>` : '<small class="history-no-record"><span class="history-no-record-label">この日の記録なし</span><span class="history-mobile-none" aria-hidden="true">—</span></small>'}</td>`;
       }).join('')}</tr>`).join('');
       return `<section class="history-week"><h3>${esc(w.from)}〜${esc(w.to)}</h3>${w.lineup_day?`<p class="note">分類日：${esc(w.lineup_day)}（作成時の構成で固定）</p>`:''}<div class="history-overflow"><table class="history-table"><thead><tr><th>機種名・台数</th>${days.map(d=>`<th>${esc(shortDateWeek(d))}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div></section>`;
-    }).join('')}<p class="note">${saiwaichou?'2,500枚以上＝優、0〜2,499枚＝良。マイナス・差枚不明は空欄です。入力・修正はPCのみ。':'記号の意味は未設定です。'}「↗」は、その機種・その日の保存データを表示します。</p>`;
+    }).join('')}<p class="note">${saiwaichou?'空欄の日は差枚から自動（2,500枚以上＝優、0〜2,499枚＝良、マイナス・不明は—）。手入力はPCのみで優先。':'記号の意味は未設定です。'}「↗」は、その機種・その日の保存データを表示します。</p>`;
   };
   const racksOf=(day,machine)=>(state.model.byDay.get(`${location}|${day}`)??[]).filter(r=>r.machine===machine).sort((a,b)=>a.rack-b.rack);
   const machineView = view => {

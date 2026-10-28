@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=e012d00cda18';
+import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=9b704b8056a2';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -376,6 +376,38 @@ export function viewerNameFrom(text) {
 export const VARIETY_MAX_RACKS = 3;
 /** 幸町は1〜2台（2026-10-13利用者指定）、ほかの店舗は1〜3台。 */
 export const varietyMaxRacksFor = store => store === 'saiwaichou' ? 2 : VARIETY_MAX_RACKS;
+
+// 幸町のバラエティ履歴（2026-10-29 利用者指定）。PC event_history_data・閲覧ページ event_history_model と同じ判定。
+// 優・良は表示のたびに機種のその日の合計差枚から決める（保存しない。手入力が優先）。
+// 赤字は、今日を除いた直前5暦日に合計差枚が+800枚を超えた日も優の日も無い機種。記録なし・差枚不明の日は超えていないと数える。
+export const SAIWAICHOU_GAP_NET = 800, SAIWAICHOU_GAP_DAYS = 5;
+
+/** その日のその保存名の台（indexRecords の、数値異常を除いた台）の合計差枚。台数が週表と違う・差枚の分からない台があれば null。 */
+export function saiwaichouMachineNet(racks, count) {
+  if (!racks.length || racks.length !== count || racks.some(r => typeof r.net !== 'number' || !Number.isFinite(r.net))) return null;
+  return racks.reduce((sum, r) => sum + r.net, 0);
+}
+
+/** 2,500枚以上は優、0〜2,499枚は良。マイナス・不明は空欄。 */
+export const saiwaichouGrade = total => total == null || total < 0 ? '' : total >= 2500 ? '優' : '良';
+
+/** 赤字判定の最終日：表示週の最後の記録日。ただし今日（日本時間）は含めない。 */
+export function saiwaichouGapEnd(lastRecordDay, now = Date.now()) {
+  if (!lastRecordDay) return null;
+  const yesterday = new Date(now + 9 * 3600000 - 86400000).toISOString().slice(0, 10);
+  return lastRecordDay < yesterday ? lastRecordDay : yesterday;
+}
+
+/** endDay までの5暦日に、合計差枚が+800枚を超えた日も優の日も無ければ true。dayInfo(日) は {net, grade}。 */
+export function saiwaichouGap(endDay, dayInfo) {
+  if (!endDay) return false;
+  const end = Date.parse(`${endDay}T00:00:00Z`);
+  for (let i = 0; i < SAIWAICHOU_GAP_DAYS; i++) {
+    const {net, grade} = dayInfo(new Date(end - i * 86400000).toISOString().slice(0, 10));
+    if ((net != null && net > SAIWAICHOU_GAP_NET) || grade === '優') return false;
+  }
+  return true;
+}
 /** 回っていない台：期間（カレンダーの日数）とゲーム数の選択肢・既定値（閲覧ページ variety_idle.dart と同じ）。 */
 export const IDLE_DAY_CHOICES = [3, 5, 7, 10, 14], IDLE_DEFAULT_DAYS = 7;
 export const IDLE_GAMES_CHOICES = [500, 1000, 1500, 2000, 3000], IDLE_DEFAULT_GAMES = 1000;
