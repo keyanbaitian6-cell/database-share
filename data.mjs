@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=9b704b8056a2';
+import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=0f0025fc85ae';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -852,4 +852,31 @@ export function characterBirthdayCellLabel(names) {
   if (!names.length) return '';
   const more = names.length > 2 ? ` ほか${names.length - 2}名` : '';
   return `🎂 ${names.slice(0, 2).join('・')}${more}`;
+}
+
+// 旧Googleスクリプトの1回5,000件制限を守り、失敗時は以降を送らない。
+// 呼び出し元は端末の印を保持し、次の操作で再送する（部分成功も同じ時刻で安全に再送）。
+export async function sendRainbowBatches(marks, post, canBatch = async () => false) {
+  if (marks.length > 5000 && await canBatch() !== true) {
+    return {error: '5,000件を超える🌈の共有にはGoogleスクリプトの更新が必要です。端末の印は保持しています。'};
+  }
+  for (let start = 0; start < marks.length; start += 5000) {
+    const result = await post({file: 'rainbow', marks: marks.slice(start, start + 5000)});
+    if (result?.ok !== true) return result ?? {error: '返事が読めません'};
+  }
+  return {ok: true};
+}
+
+// 独立保存の印は、一部でも読めなければ書き込みを止める。表示用の寛容な統合とは分ける。
+export function storedRainbowMarks(text) {
+  if (text === null) return [];
+  const marks = JSON.parse(text);
+  if (!Array.isArray(marks) || marks.some(m => !validMark(m))) {
+    throw new Error('保存済みの🌈を確認できません。');
+  }
+  return mergeMarks([], marks);
+}
+
+export function sharedRainbowCanBatch(doc) {
+  return doc?.format === 'database-release' && Array.isArray(doc.capabilities) && doc.capabilities.includes('rainbow-storage-v2');
 }

@@ -1,6 +1,6 @@
-import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=9b704b8056a2';
-import {updateStatusLines,netHealth} from './capture_health.mjs?v=9b704b8056a2';
-import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=9b704b8056a2';
+import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=0f0025fc85ae';
+import {updateStatusLines,netHealth} from './capture_health.mjs?v=0f0025fc85ae';
+import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=0f0025fc85ae';
 // 閲覧専用の共有ページ（お試し、2026-10-09。EVENT_CALENDAR.md「閲覧専用の共有ページ」）。
 // 読むだけのApps Script（database_android/tool/viewer_drive_script_readonly.gs）からDriveのファイルを読み、
 // イベントカレンダー（各日のイベント・総差枚）と、日付を押したときの差枚TOP50（11位からは折りたたみ）・強かった機種10選、
@@ -8,13 +8,13 @@ import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, histor
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=9b704b8056a2';
-import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=9b704b8056a2';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=0f0025fc85ae';
+import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=0f0025fc85ae';
 import {
   MERUHEN_STORES, calendarDay, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords, lowGamesNote,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
   IDLE_DAY_CHOICES, IDLE_DEFAULT_DAYS, IDLE_DEFAULT_GAMES, IDLE_GAMES_CHOICES, idleVarietyRacks, storeDays,
-  RAINBOW, lastRainbowDay, lastRainbowText, rackMark, storeHasRainbow,
+  sharedRainbowCanBatch, storedRainbowMarks, sendRainbowBatches, RAINBOW, lastRainbowDay, lastRainbowText, rackMark, storeHasRainbow,
   RAINBOW_COUNT_DAYS, applyRainbowMarks, markTime, mergeMarks, varietyRecordRows,
   ROTATION_DAYS, byLongestGap, daysSinceRainbow, rackDays, rainbowVarietyMax, windowDays,
   SUFFIX_PERIODS, hasSuffixSummary, suffixesOf, zoromeEndingsOf, suffixLabel, suffixReport,
@@ -22,7 +22,7 @@ import {
   SAIWAICHOU_GAP_NET, saiwaichouMachineNet, saiwaichouGrade, saiwaichouGapEnd, saiwaichouGap,
   monthDayList, periodWinRate, winRateYears, yearWinRates, loadFailureText,
   characterBirthdayCellLabel, characterBirthdaysOn, parseCharacterBirthdays,
-} from './data.mjs?v=9b704b8056a2';
+} from './data.mjs?v=0f0025fc85ae';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -82,7 +82,7 @@ async function getJson(url) {
  */
 async function loadBirthdays() {
   try {
-    const response = await fetch('./character_birthdays.json?v=9b704b8056a2', {credentials: 'omit'});
+    const response = await fetch('./character_birthdays.json?v=0f0025fc85ae', {credentials: 'omit'});
     if (!response.ok) return;
     state.birthdays = parseCharacterBirthdays(await response.json());
     if (state.model) render();
@@ -895,9 +895,16 @@ async function toggleRainbow(key) {
     ? rainbowTodayRows(state.model.byDay, state.model.marks, s, day).rows.find(x => x.rack === rack)?.marker : null;
   const r = actual ?? pending;
   if (!r) return;
-  const old = localMarks().find(m => m.store === s && m.day === day && m.rack === rack);
+  let saved;
+  try {
+    saved = storedRainbowMarks(localStorage.getItem(MARKS_KEY));
+  } catch {
+    toast('保存済みの🌈を確認できません。元の内容を保持して操作を止めました。');
+    return;
+  }
+  const old = saved.find(m => m.store === s && m.day === day && m.rack === rack);
   const mark = {store: s, day, rack, on: !r.rainbow, updated_at: markTime(Date.now(), r.rainbowAt, old?.updated_at)};
-  const marks = mergeMarks(localMarks(), [mark]);
+  const marks = mergeMarks(saved, [mark]);
   try {
     localStorage.setItem(MARKS_KEY, JSON.stringify(marks));
   } catch {
@@ -909,11 +916,14 @@ async function toggleRainbow(key) {
   state.model.marks = mergeMarks(state.model.marks, [mark]);
   const done = mark.on ? `${rack}番台に${RAINBOW}を付けました。` : `${rack}番台の${RAINBOW}を外しました。`;
   try {
-    const response = await fetch(`https://script.google.com/macros/s/${state.id}/exec`, {
-      method: 'POST', headers: {'Content-Type': 'text/plain;charset=utf-8'}, credentials: 'omit',
-      body: JSON.stringify({file: 'rainbow', marks}),
-    });
-    const result = await response.json();
+    const result = await sendRainbowBatches(marks, async body => {
+      const response = await fetch(`https://script.google.com/macros/s/${state.id}/exec`, {
+        method: 'POST', headers: {'Content-Type': 'text/plain;charset=utf-8'}, credentials: 'omit',
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) throw new Error(`共有先の応答：${response.status}`);
+      return response.json();
+    }, async () => sharedRainbowCanBatch(await getJson(`https://script.google.com/macros/s/${state.id}/exec?file=diagnostic`)));
     toast(result.ok ? `${done}共有しました。` : `${done}（この端末には残しました。共有には送れませんでした：${result.error ?? '返事が読めません'}）`);
   } catch (error) {
     toast(`${done}（この端末には残しました。共有には送れませんでした。次に付け外しするときにまた送ります）`);
