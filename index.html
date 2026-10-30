@@ -7,9 +7,9 @@
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#ffffff">
 <title>database カレンダー</title>
-<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=a4b3837d3970">
-<link rel="icon" type="image/png" sizes="32x32" href="./favicon.png?v=a4b3837d3970">
-<link rel="manifest" href="./manifest.json?v=a4b3837d3970">
+<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=6933cf38defd">
+<link rel="icon" type="image/png" sizes="32x32" href="./favicon.png?v=6933cf38defd">
+<link rel="manifest" href="./manifest.json?v=6933cf38defd">
 <style>
   :root {
     --color-gallery-white: #ffffff;
@@ -81,9 +81,13 @@
     font-size: clamp(44px, 12vw, 80px); line-height: 1.05; letter-spacing: -0.015em;
   }
   .hero .lede { color: var(--color-slate); margin: 16px auto 0; max-width: 34em; }
-  .hero .month-stats { display: flex; flex-wrap: wrap; gap: 4px 20px; }
-  .hero .month-rate { margin: 10px 0 0; font-size: 17px; font-weight: 600; letter-spacing: -0.374px; }
-  .hero .month-rate .sub { display: block; font-size: 12px; font-weight: 400; letter-spacing: -0.12px; color: var(--color-slate); margin-top: 2px; }
+  .hero .month-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 540px; margin: 22px auto 0; padding: 18px 0; border: 1px solid var(--color-hairline-silver); border-radius: 16px; background: var(--color-paper-frost); }
+  .month-stat { min-width: 0; padding: 0 10px; }
+  .month-stat + .month-stat { border-left: 1px solid var(--color-hairline-silver); }
+  .stat-label { display: block; color: var(--color-slate); font-size: 12px; font-weight: 500; line-height: 18px; }
+  .stat-value { display: block; margin-top: 5px; font-size: clamp(22px, 5.6vw, 32px); font-weight: 600; line-height: 1.25; letter-spacing: -0.04em; white-space: nowrap; }
+  .stat-value small { margin-left: 3px; font-size: 12px; font-weight: 400; }
+  .stat-detail { display: block; margin-top: 6px; color: var(--color-slate); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
 
   /* 店舗の切り替え（2026-10-09 利用者「どこを選択してるかすぐわかるように。枠をつける・選択してるところは色つける」）：
      枠で囲んだ1本の帯に店舗を並べ、選んでいる店だけ青で塗る。 */
@@ -387,6 +391,6 @@
   <p>差枚＝その日の総差枚（差枚がわかった台の合計）。メルヘンはグラフと最大持玉からの推定差枚で、確定値ではありません（※は要確認）。P-STATIONは元グラフの差枚です。</p>
   <p>＊＝前日までに入力した記録がないイベント（当日以降の入力・時刻不明）。強かった機種＝1台あたりの平均回転数（2台以上ある機種）。</p>
 </footer>
-<script type="module" src="./app.mjs?v=a4b3837d3970"></script>
+<script type="module" src="./app.mjs?v=6933cf38defd"></script>
 </body>
 </html>

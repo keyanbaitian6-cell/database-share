@@ -1,6 +1,6 @@
-import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=a4b3837d3970';
-import {updateStatusLines,netHealth} from './capture_health.mjs?v=a4b3837d3970';
-import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=a4b3837d3970';
+import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=6933cf38defd';
+import {updateStatusLines,netHealth} from './capture_health.mjs?v=6933cf38defd';
+import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=6933cf38defd';
 // 閲覧専用の共有ページ（お試し、2026-10-09。EVENT_CALENDAR.md「閲覧専用の共有ページ」）。
 // 読むだけのApps Script（database_android/tool/viewer_drive_script_readonly.gs）からDriveのファイルを読み、
 // イベントカレンダー（各日のイベント・総差枚）と、日付を押したときの差枚TOP50（11位からは折りたたみ）・強かった機種10選、
@@ -8,8 +8,8 @@ import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, histor
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=a4b3837d3970';
-import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=a4b3837d3970';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=6933cf38defd';
+import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=6933cf38defd';
 import {
   MERUHEN_STORES, calendarDay, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords, lowGamesNote,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
@@ -22,7 +22,7 @@ import {
   SAIWAICHOU_GAP_NET, saiwaichouMachineNet, saiwaichouGrade, saiwaichouGapEnd, saiwaichouGap,
   monthDayList, periodWinRate, winRateYears, yearWinRates, loadFailureText,
   characterBirthdayCellLabel, characterBirthdaysOn, parseCharacterBirthdays,
-} from './data.mjs?v=a4b3837d3970';
+} from './data.mjs?v=6933cf38defd';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -82,7 +82,7 @@ async function getJson(url) {
  */
 async function loadBirthdays() {
   try {
-    const response = await fetch('./character_birthdays.json?v=a4b3837d3970', {credentials: 'omit'});
+    const response = await fetch('./character_birthdays.json?v=6933cf38defd', {credentials: 'omit'});
     if (!response.ok) return;
     state.birthdays = parseCharacterBirthdays(await response.json());
     if (state.model) render();
@@ -224,7 +224,10 @@ function render() {
     <section class="hero">
       <p class="kicker">${esc(storeLabel(state.store))}</p>
       <h1 class="headline num">${state.year}年${state.month}月</h1>
-      <div class="month-stats">${monthRate.judged ? `<p class="month-rate num" data-month-rate>月間の${winRateText(monthRate.won, monthRate.judged)}<span class="sub">${monthRate.days}日・${count(monthRate.judged)}台中${count(monthRate.won)}台プラス</span></p>` : ''}<p class="month-rate num" data-month-net>月間差枚 ${monthNet == null ? '—' : signed(monthNet) + '枚'}<span class="sub">${monthNet == null ? '差枚データなし' : `差枚が分かる${count(monthNets.length)}台の合計${state.store.startsWith('pscube:') ? '' : '（推定を含む）'}`}</span></p></div>
+      <div class="month-stats" aria-label="月間の集計">
+        <div class="month-stat" data-month-rate><span class="stat-label">月間勝率</span><span class="stat-value num">${monthRate.judged ? winRateText(monthRate.won, monthRate.judged).replace('勝率', '') : '—'}</span><span class="stat-detail">${monthRate.judged ? `${monthRate.days}日分・${count(monthRate.won)} / ${count(monthRate.judged)}台プラス` : '勝率データなし'}</span></div>
+        <div class="month-stat" data-month-net><span class="stat-label">月間差枚${state.store.startsWith('pscube:') ? '' : '（推定含む）'}</span><span class="stat-value num ${monthNet == null ? '' : tone(monthNet)}">${monthNet == null ? '—' : signed(monthNet)}<small>${monthNet == null ? '' : '枚'}</small></span><span class="stat-detail">${monthNet == null ? '差枚データなし' : `取得分 延べ${count(monthNets.length)}台`}</span></div>
+      </div>
       <p class="lede">日付を押すと、その日の差枚TOP50と強かった機種10選が見られます。</p>
     </section>
     <div class="stores">
