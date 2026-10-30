@@ -7,9 +7,9 @@
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#ffffff">
 <title>database カレンダー</title>
-<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=6933cf38defd">
-<link rel="icon" type="image/png" sizes="32x32" href="./favicon.png?v=6933cf38defd">
-<link rel="manifest" href="./manifest-android.json?v=6933cf38defd">
+<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=4e2dd7e43d3c">
+<link rel="icon" type="image/png" sizes="32x32" href="./favicon.png?v=4e2dd7e43d3c">
+<link rel="manifest" href="./manifest-android.json?v=4e2dd7e43d3c">
 <style>
   :root {
     --color-gallery-white: #ffffff;
@@ -88,6 +88,23 @@
   .stat-value { display: block; margin-top: 5px; font-size: clamp(22px, 5.6vw, 32px); font-weight: 600; line-height: 1.25; letter-spacing: -0.04em; white-space: nowrap; }
   .stat-value small { margin-left: 3px; font-size: 12px; font-weight: 400; }
   .stat-detail { display: block; margin-top: 6px; color: var(--color-slate); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+
+  /* 承認済み参考画像に合わせた交換額の補足欄。 */
+  .hero{padding-top:30px;padding-bottom:20px}
+  .month-stats{row-gap:16px}
+  .exchange-summary{grid-column:1/-1;border-top:1px solid var(--color-hairline-silver);padding:14px 16px 0;text-align:left}
+  .exchange-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12px;color:var(--color-slate)}
+  .exchange-value{font-size:18px;font-weight:600;color:var(--color-ink);white-space:nowrap}
+  .exchange-rate{margin:5px 0 0;font-size:11px;color:var(--color-slate)}
+  .exchange-note{margin:10px 0 0;font-size:11px;line-height:1.65;color:var(--color-slate)}
+  .exchange-info{font-size:11px;color:var(--color-slate);margin-top:6px}
+  .exchange-info summary{cursor:pointer}
+  .exchange-info p{line-height:1.7;margin:8px 0 0}
+  .month-stats .month-stat{padding:0 8px}
+  .hero .lede{font-size:13px;line-height:1.7}
+  .kicker{font-size:19px;line-height:1.4}
+  .tools{padding-top:14px}
+  .months{padding-bottom:20px}
 
   /* 店舗の切り替え（2026-10-09 利用者「どこを選択してるかすぐわかるように。枠をつける・選択してるところは色つける」）：
      枠で囲んだ1本の帯に店舗を並べ、選んでいる店だけ青で塗る。 */
@@ -391,6 +408,6 @@
   <p>差枚＝その日の総差枚（差枚がわかった台の合計）。メルヘンはグラフと最大持玉からの推定差枚で、確定値ではありません（※は要確認）。P-STATIONは元グラフの差枚です。</p>
   <p>＊＝前日までに入力した記録がないイベント（当日以降の入力・時刻不明）。強かった機種＝1台あたりの平均回転数（2台以上ある機種）。</p>
 </footer>
-<script type="module" src="./app.mjs?v=6933cf38defd"></script>
+<script type="module" src="./app.mjs?v=4e2dd7e43d3c"></script>
 </body>
 </html>
