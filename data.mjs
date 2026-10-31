@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=4e2dd7e43d3c';
+import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=851c671444d4';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -143,14 +143,36 @@ export function pscubeRecords(doc) {
 
 /** 店・日ごとの台（数値異常の台は除く）。 */
 export function indexRecords(records) {
-  const byDay = new Map();
+  const byDay = new Map(), groups = new Map();
+  byDay.issues = [];
+  // 値の同一性はプロパティの順序に依存させない。入力を変更しない。
+  const canonical = v => Array.isArray(v) ? v.map(canonical) : v && typeof v === 'object'
+    ? Object.fromEntries(Object.keys(v).sort().map(k => [k, canonical(v[k])])) : v;
   for (const r of records) {
-    if (implausible(r)) continue;
-    const key = `${r.store}|${r.day}`;
+    const id = JSON.stringify([r.store, r.day, r.machine, r.rack]);
+    if (!groups.has(id)) groups.set(id, []);
+    groups.get(id).push(r);
+  }
+  for (const rows of groups.values()) {
+    const r = rows[0], key = `${r.store}|${r.day}`;
+    const conflict = rows.some(x => JSON.stringify(canonical(x)) !== JSON.stringify(canonical(r)));
+    if (rows.length > 1) byDay.issues.push({store:r.store, day:r.day, rack:r.rack, machine:r.machine,
+      kind:conflict ? 'conflict' : 'duplicate', count:rows.length});
     if (!byDay.has(key)) byDay.set(key, []);
-    byDay.get(key).push(r);
+    if (!conflict && !implausible(r)) byDay.get(key).push(r);
   }
   return byDay;
+}
+
+/** 交換単価は丸めず、表示だけ丸める。小額は円で符号を保持する。 */
+export function exchangeValue(net, payout) {
+  if (net == null || !payout) return '—';
+  if (net === 0) return '0円';
+  const yen = net * 1000 / payout;
+  const sign = net > 0 ? '＋' : '−';
+  return Math.abs(yen) < 10000
+    ? `約${sign}${Math.round(Math.abs(yen)).toLocaleString('ja-JP')}円`
+    : `約${sign}${(Math.abs(yen) / 10000).toLocaleString('ja-JP', {minimumFractionDigits:1, maximumFractionDigits:1})}万円`;
 }
 
 /**

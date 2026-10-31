@@ -1,6 +1,6 @@
-import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=4e2dd7e43d3c';
-import {updateStatusLines,netHealth} from './capture_health.mjs?v=4e2dd7e43d3c';
-import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=4e2dd7e43d3c';
+import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=851c671444d4';
+import {updateStatusLines,netHealth} from './capture_health.mjs?v=851c671444d4';
+import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=851c671444d4';
 // 閲覧専用の共有ページ（お試し、2026-10-09。EVENT_CALENDAR.md「閲覧専用の共有ページ」）。
 // 読むだけのApps Script（database_android/tool/viewer_drive_script_readonly.gs）からDriveのファイルを読み、
 // イベントカレンダー（各日のイベント・総差枚）と、日付を押したときの差枚TOP50（11位からは折りたたみ）・強かった機種10選、
@@ -8,10 +8,10 @@ import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, histor
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=4e2dd7e43d3c';
-import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=4e2dd7e43d3c';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=851c671444d4';
+import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=851c671444d4';
 import {
-  MERUHEN_STORES, calendarDay, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords, lowGamesNote,
+  MERUHEN_STORES, exchangeValue, calendarDay, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords, lowGamesNote,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
   IDLE_DAY_CHOICES, IDLE_DEFAULT_DAYS, IDLE_DEFAULT_GAMES, IDLE_GAMES_CHOICES, idleVarietyRacks, storeDays,
   sharedRainbowCanBatch, storedRainbowMarks, sendRainbowBatches, RAINBOW, lastRainbowDay, lastRainbowText, rackMark, storeHasRainbow,
@@ -22,7 +22,7 @@ import {
   SAIWAICHOU_GAP_NET, saiwaichouMachineNet, saiwaichouGrade, saiwaichouGapEnd, saiwaichouGap,
   monthDayList, periodWinRate, winRateYears, yearWinRates, loadFailureText,
   characterBirthdayCellLabel, characterBirthdaysOn, parseCharacterBirthdays,
-} from './data.mjs?v=4e2dd7e43d3c';
+} from './data.mjs?v=851c671444d4';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -39,6 +39,7 @@ const TIMEOUT_MS = 30000;
 
 const app = document.getElementById('app');
 const reload = document.getElementById('reload');
+let statsObserver;
 const state = {id: null, name: null, model: null, store: null, year: 0, month: 0, loading: false, notice: '',
   birthdays: new Map(), eventHistory: null, historyNotice: '', historyDocument:null, historyRedraw:null, historySaveNotice:''};
 const HISTORY_LOCAL_KEY='database-share-history-edits:';
@@ -82,7 +83,7 @@ async function getJson(url) {
  */
 async function loadBirthdays() {
   try {
-    const response = await fetch('./character_birthdays.json?v=4e2dd7e43d3c', {credentials: 'omit'});
+    const response = await fetch('./character_birthdays.json?v=851c671444d4', {credentials: 'omit'});
     if (!response.ok) return;
     state.birthdays = parseCharacterBirthdays(await response.json());
     if (state.model) render();
@@ -100,6 +101,7 @@ async function load() {
   const loadingId = state.id;
   state.notice = '';
   if (globalThis.navigator?.onLine === false && state.model) {
+    state.sources = {meruhen:'オフライン・保存済みデータ',pscube:'オフライン・保存済みデータ'};
     state.notice = 'オフラインです。保存済みのデータを表示しています。'; render(); return;
   }
   state.loading = true;
@@ -116,6 +118,7 @@ async function load() {
   // どの店が何で失敗したかを、知らせの文にそのまま出す（2026-10-18）。
   const why = loadFailureText([['メルヘン', meruhen], ['P-STATION', pscube]]);
   if (loadingId !== state.id) return;
+  state.sources = {meruhen:m ? '最新の読み込みに成功' : '更新失敗・保存済みデータ', pscube:p ? '最新の読み込みに成功' : '更新失敗・保存済みデータ'};
   if (!m && !p) {
     state.loading = false; reload.disabled = false;
     const reason = [meruhen, pscube].map(r => (r.status === 'rejected' ? r.reason?.message : r.value?.error)).find(Boolean);
@@ -162,12 +165,14 @@ function showDocuments(m, p, metadata = {}) {
   const sharedMarks = metadata.rainbow?.marks;
   const marks = mergeMarks(Array.isArray(sharedMarks) ? sharedMarks : [], localMarks());
   applyRainbowMarks(byDay, marks);
+  const summaries = daySummaries(m);
+  for (const issue of byDay.issues) if (issue.kind === 'conflict') summaries.delete(`${issue.store}|${issue.day}`);
   const stores = [...Object.keys(MERUHEN_STORES), ...new Set(records.map(r => r.store).filter(s => s.startsWith('pscube:')))]
-    .filter(s => records.some(r => r.store === s));
+    .filter(s => records.some(r => r.store === s) || [...summaries.keys()].some(k => k.startsWith(s + '|')));
   state.model = {
-    byDay, stores, marks, health:metadata.health || {}, summaries: daySummaries(m),
+    byDay, stores, marks, health:metadata.health || {}, summaries,
     events: mergeEvents(m?.date_events, metadata.events?.events, p?.date_events, metadata.pscubeEvents?.events),
-    exportedAt: [m?.exported_at, p?.exported_at].filter(Boolean).sort().pop() ?? null,
+    exportedBySite: {meruhen:m?.exported_at ?? m?.header?.exported_at, pscube:p?.exported_at ?? p?.header?.exported_at},
   };
   if (!stores.includes(state.store)) state.store = stores.includes(store.get(STORE_KEY)) ? store.get(STORE_KEY) : stores[0];
   render();
@@ -188,7 +193,8 @@ function exportedText(text) {
 
 function render() {
   const {model} = state;
-  if (!model || !model.stores.length) return;
+  if (!model) return;
+  if (!model.stores.length) { app.innerHTML = '<p class="status" role="status">表示できるデータがありません。右上の「最新を読む」で再読み込みできます。</p>'; return; }
   const today = todayJst();
   const weeks = monthWeeks(state.year, state.month);
   // 月間の勝率（2026-10-18 利用者「月ごとに月間の勝率出す」）：その月の日の台数を足して割る。
@@ -198,8 +204,13 @@ function render() {
   const exchange = state.store === 'pscube:c740601:20'
     ? {loan: 50, payout: 58}
     : Object.hasOwn(MERUHEN_STORES, state.store) ? {loan: 46, payout: 50} : null;
-  const exchangeAmount = monthNet == null || !exchange ? '—'
-    : `約${(monthNet / exchange.payout / 10).toLocaleString('ja-JP', {minimumFractionDigits: 1, maximumFractionDigits: 1})}万円`;
+  const exchangeAmount = exchangeValue(monthNet, exchange?.payout);
+  const site = state.store.startsWith('pscube:') ? 'pscube' : 'meruhen';
+  const exported = exportedText(model.exportedBySite[site]);
+  const days = [...new Set([...model.byDay.keys(), ...model.summaries.keys()].filter(k => k.startsWith(state.store + '|')).map(k => k.split('|')[1]))].sort();
+  const netDays = new Set(monthDayList(state.year, state.month).filter(day => (model.byDay.get(`${state.store}|${day}`) ?? []).some(r => r.net != null))).size;
+  const issues = (model.byDay.issues ?? []).filter(i => i.store === state.store && i.day.startsWith(`${state.year}-${String(state.month).padStart(2,'0')}`));
+  const conflicts = issues.filter(i => i.kind === 'conflict');
   const cells = weeks.flat().map(day => {
     if (!day) return '<div class="blank" aria-hidden="true"></div>';
     const racks = model.byDay.get(`${state.store}|${day}`) ?? [];
@@ -229,10 +240,13 @@ function render() {
     <section class="hero">
       <p class="kicker">${esc(storeLabel(state.store))}</p>
       <h1 class="headline num">${state.year}年${state.month}月</h1>
+      <div class="data-status" data-source-status><p>${esc(state.sources?.[site] ?? '保存済みデータを表示')}</p><p>元データ：${esc(exported || '書出日時不明')} ／ 最新営業日：${esc(days.at(-1) ?? 'なし')}</p></div>
+      ${state.notice ? `<p class="data-warning" role="status">${esc(state.notice)}</p>` : ''}
+      ${issues.length ? `<details class="data-warning" data-record-issues><summary>${conflicts.length ? `内容が異なる${conflicts.length}台分を集計から除外しています` : '同一記録の重複を1件として集計しています'}</summary>${issues.map(i => `<p>${esc(i.day)} ${i.rack}番 ${esc(displayMachineName(i.machine))}：${i.kind === 'conflict' ? '内容が競合・集計保留' : '同一内容の重複'}（${i.count}件）</p>`).join('')}<p>保存元の記録は削除していません。</p></details>` : ''}
       <div class="month-stats" aria-label="月間の集計">
         <div class="month-stat" data-month-rate><span class="stat-label">月間勝率</span><span class="stat-value num">${monthRate.judged ? winRateText(monthRate.won, monthRate.judged).replace('勝率', '') : '—'}</span><span class="stat-detail">${monthRate.judged ? `${monthRate.days}日分・${count(monthRate.won)} / ${count(monthRate.judged)}台プラス` : '勝率データなし'}</span></div>
-        <div class="month-stat" data-month-net><span class="stat-label">月間差枚${state.store.startsWith('pscube:') ? '' : '（推定含む）'}</span><span class="stat-value num ${monthNet == null ? '' : tone(monthNet)}">${monthNet == null ? '—' : signed(monthNet)}<small>${monthNet == null ? '' : '枚'}</small></span><span class="stat-detail">${monthNet == null ? '差枚データなし' : `取得分 延べ${count(monthNets.length)}台`}</span></div>
-        ${exchange ? `<div class="exchange-summary" data-month-exchange><div class="exchange-head"><span>交換額換算（参考）</span><strong class="exchange-value num">${exchangeAmount}</strong></div><p class="exchange-rate">${exchange.loan}枚貸し・${exchange.payout}枚交換 ／ 1枚${exchange.payout === 50 ? '20' : '約17.24'}円で換算</p><p class="exchange-note">差枚を交換単価で換算した参考値です。<br>現金投資時の貸出・交換の差は含まず、実収支ではありません。</p><details class="exchange-info"><summary>換算について</summary><p>貸出・交換の枚数はそれぞれ1,000円相当として計算。現金投資か持ちメダル遊技かによって収支は変わります。${state.store.startsWith('pscube:') ? '' : '元の差枚が推定の場合、換算額にも誤差を含みます。'}差枚が分かる台だけの合計を換算し、差枚データがない月は「—」と表示します。</p></details></div>` : ''}
+        <div class="month-stat" data-month-net><span class="stat-label">月間差枚${state.store.startsWith('pscube:') ? '' : '（推定含む）'}</span><span class="stat-value num ${monthNet == null ? '' : tone(monthNet)}">${monthNet == null ? '—' : signed(monthNet)}<small>${monthNet == null ? '' : '枚'}</small></span><span class="stat-detail">${monthNet == null ? '差枚データなし' : `取得分 ${netDays}日・延べ${count(monthNets.length)}台`}</span></div>
+        ${exchange ? `<div class="exchange-summary" data-month-exchange><div class="exchange-head"><span>交換額換算（参考）</span><strong class="exchange-value num">${exchangeAmount}</strong></div><p class="exchange-rate">${exchange.loan}枚貸し・${exchange.payout}枚交換 ／ 1枚${exchange.payout === 50 ? '20' : '約17.24'}円で換算</p><p class="exchange-note">取得できた差枚だけの参考額です。<br>実収支ではありません。</p><details class="exchange-info"><summary>換算について</summary><p>過去月も現在指定の交換条件で換算しています。貸出・交換の枚数はそれぞれ1,000円相当として計算。現金投資時の貸出・交換の差は含みません。現金投資か持ちメダル遊技かによって収支は変わります。${state.store.startsWith('pscube:') ? '' : '元の差枚が推定の場合、換算額にも誤差を含みます。'}差枚が分かる台だけの合計を換算し、差枚データがない月は「—」と表示します。</p></details></div>` : ''}
       </div>
       <p class="lede">日付を押すと、その日の差枚TOP50と強かった機種10選が見られます。</p>
     </section>
@@ -259,10 +273,29 @@ function render() {
         <div class="weekdays" aria-hidden="true">${WEEKDAYS.map(w => `<span>${w}</span>`).join('')}</div>
         <div class="grid">${cells}</div>
       </div>
-      ${state.notice ? `<p class="legend" role="status">${esc(state.notice)}</p>` : ''}
       ${healthDetails()}
-      <p class="legend">${esc(exportedText(model.exportedAt))}${model.exportedAt ? '。' : ''}差枚＝その日の総差枚（メルヘンは推定）。🎂＝キャラ誕生日（イベントとは別。押すと全員を「名前（作品）」で見られる）。差枚の分かる台が半分に満たない日（アナスロ補完の日など）は勝率＝プラスで終わった台の割合（グラフの終点で判定）。台のデータが無い日の勝率は、保存したアナスロのHTMLから数えたもの（押すと何台中何台プラスか）。＊＝前日までに入力した記録がないイベント。</p>
+      <p class="legend">差枚＝その日の総差枚（メルヘンは推定）。🎂＝キャラ誕生日（イベントとは別。押すと全員を「名前（作品）」で見られる）。差枚の分かる台が半分に満たない日（アナスロ補完の日など）は勝率＝プラスで終わった台の割合（グラフの終点で判定）。台のデータが無い日の勝率は、保存したアナスロのHTMLから数えたもの（押すと何台中何台プラスか）。＊＝前日までに入力した記録がないイベント。</p>
     </section>`;
+  fitMonthStats();
+}
+
+// フォント拡大で数値が収まらない場合は、その項目内でも上下に分ける。
+function fitMonthStats() {
+  statsObserver?.disconnect();
+  const stats = app.querySelector('.month-stats');
+  if (!stats) return;
+  const fit = () => {
+    for (const value of stats.querySelectorAll('.stat-value')) {
+      const row = value.parentElement, clone = value.cloneNode(true);
+      clone.style.cssText = 'position:fixed;visibility:hidden;width:max-content;max-width:none;white-space:nowrap;';
+      row.append(clone);
+      const needed = clone.getBoundingClientRect().width;
+      clone.remove();
+      row.classList.toggle('large-number', needed > (row.clientWidth - 28) / 2);
+    }
+  };
+  fit();
+  if (globalThis.ResizeObserver) { statsObserver = new ResizeObserver(() => requestAnimationFrame(fit)); statsObserver.observe(stats); }
 }
 
 function healthDetails() {
@@ -1168,7 +1201,7 @@ function showSetup(message) {
   app.innerHTML = `
     <section class="hero">
       <p class="kicker">database カレンダー</p>
-      <h1 class="headline">閲覧専用</h1>
+      <h1 class="headline">共有カレンダー</h1>
     </section>
     <form class="panel" id="setup">
       <p>${esc(message ?? '受け取ったリンクから開いてください。リンクを貼り付けても開けます。')}</p>
@@ -1198,6 +1231,7 @@ async function connect(id) {
   }
   state.loading = false; reload.disabled = false;
   state.id = id;
+  state.sources = {meruhen:'保存済みデータを表示', pscube:'保存済みデータを表示'};
   store.set(ID_KEY, id);
   reload.hidden = false;
   const base = `https://script.google.com/macros/s/${id}/exec`;
