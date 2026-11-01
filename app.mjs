@@ -1,6 +1,6 @@
-import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=851c671444d4';
-import {updateStatusLines,netHealth} from './capture_health.mjs?v=851c671444d4';
-import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=851c671444d4';
+import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=d742103e6abf';
+import {updateStatusLines,netHealth} from './capture_health.mjs?v=d742103e6abf';
+import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=d742103e6abf';
 // 閲覧専用の共有ページ（お試し、2026-10-09。EVENT_CALENDAR.md「閲覧専用の共有ページ」）。
 // 読むだけのApps Script（database_android/tool/viewer_drive_script_readonly.gs）からDriveのファイルを読み、
 // イベントカレンダー（各日のイベント・総差枚）と、日付を押したときの差枚TOP50（11位からは折りたたみ）・強かった機種10選、
@@ -8,21 +8,21 @@ import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, histor
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=851c671444d4';
-import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=851c671444d4';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=d742103e6abf';
+import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=d742103e6abf';
 import {
   MERUHEN_STORES, exchangeValue, calendarDay, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords, lowGamesNote,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
   IDLE_DAY_CHOICES, IDLE_DEFAULT_DAYS, IDLE_DEFAULT_GAMES, IDLE_GAMES_CHOICES, idleVarietyRacks, storeDays,
   sharedRainbowCanBatch, storedRainbowMarks, sendRainbowBatches, RAINBOW, lastRainbowDay, lastRainbowText, rackMark, storeHasRainbow,
   RAINBOW_COUNT_DAYS, applyRainbowMarks, markTime, mergeMarks, varietyRecordRows,
-  ROTATION_DAYS, byLongestGap, daysSinceRainbow, rackDays, rainbowVarietyMax, windowDays,
+  ROTATION_DAYS, ROTATION_SORTS, byLongestGap, daysSinceRainbow, rackDays, rainbowVarietyMax, rotationOrder, windowDays,
   SUFFIX_PERIODS, hasSuffixSummary, suffixesOf, zoromeEndingsOf, suffixLabel, suffixReport,
   varietyWeek, varietyMaxRacksFor, rainbowTodayRows,
   SAIWAICHOU_GAP_NET, saiwaichouMachineNet, saiwaichouGrade, saiwaichouGapEnd, saiwaichouGap,
   monthDayList, periodWinRate, winRateYears, yearWinRates, loadFailureText,
   characterBirthdayCellLabel, characterBirthdaysOn, parseCharacterBirthdays,
-} from './data.mjs?v=851c671444d4';
+} from './data.mjs?v=d742103e6abf';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -83,7 +83,7 @@ async function getJson(url) {
  */
 async function loadBirthdays() {
   try {
-    const response = await fetch('./character_birthdays.json?v=851c671444d4', {credentials: 'omit'});
+    const response = await fetch('./character_birthdays.json?v=d742103e6abf', {credentials: 'omit'});
     if (!response.ok) return;
     state.birthdays = parseCharacterBirthdays(await response.json());
     if (state.model) render();
@@ -995,7 +995,9 @@ function openVariety() {
   const today = todayJst().day;
   const mode = Object.hasOwn(modes, savedMode) ? savedMode : state.store === 'saiwaichou' ? 'week' : 'grid';
   // 候補は記録のある最新の日のまま。
-  const first = {kind: 'variety', day: mode === 'grid' ? today : days[0], todayDay: today, mode, sort: store.get(VARIETY_SORT_KEY) === 'gap' ? 'gap' : 'grid'};
+  const savedSort = store.get(VARIETY_SORT_KEY);
+  const first = {kind: 'variety', day: mode === 'grid' ? today : days[0], todayDay: today, mode,
+    sort: savedSort === 'gap' || Object.hasOwn(ROTATION_SORTS, savedSort) ? savedSort : 'grid'};
   const gapText = (x, day) => {
     const n = daysSinceRainbow(x.last, day);
     return n == null ? 'なし' : n === 0 ? '当日' : `${n}日`;
@@ -1014,12 +1016,15 @@ function openVariety() {
   };
   const gridView = (view, rows) => {
     const window = windowDays(view.day);
+    // 回転数で並べたときだけ、台名の下に表示中の日の回転数を出す（行の番号は元の rows の位置。押したときの台を取り違えない）。
+    const byGames = view.sort !== 'grid' && Object.hasOwn(ROTATION_SORTS, view.sort);
+    const gamesText = x => (Number.isFinite(x.record?.games) ? `${x.record.games.toLocaleString('ja-JP')}G` : '回転数なし');
     const head = window.map(d => `<span class="d num${d === view.day ? ' today' : ''}">${Number(d.slice(8))}</span>`).join('');
     return `<p class="caption">マスを押すとその日の${RAINBOW}を付け外し（記録の無い日は押せません）。右端＝最後の${RAINBOW}から何日。台番号を押すとその台のデータ。</p>
       <div class="rotation" role="table" aria-label="ローテーション表">
         <div class="r head" role="row"><span class="who">台</span>${head}<span class="gap">日数</span></div>
-        ${rows.map((x, i) => `<div class="r" role="row">
-          <button type="button" class="who row-link" data-variety-rack="${i}"${x.open ? '' : ' disabled'}><span class="num">${x.rack}</span><span class="m">${esc(displayMachineName(x.machine))}</span></button>
+        ${rotationOrder(rows, view.sort).map(x => `<div class="r" role="row">
+          <button type="button" class="who row-link" data-variety-rack="${rows.indexOf(x)}"${x.open ? '' : ' disabled'}><span class="num">${x.rack}</span><span class="m">${esc(displayMachineName(x.machine))}</span>${byGames ? `<span class="g">${gamesText(x)}</span>` : ''}</button>
           ${rackDays(state.model.byDay, state.store, x.rack, window).map((r, k) => (window[k] === view.day ? x.mark : r)).map((r, k) => (r
             ? `<button type="button" class="c${r.rainbow ? ' on' : ''}${window[k] === view.day ? ' today' : ''}" data-rainbow="${esc(`${r.store}|${r.day}|${r.rack}`)}" aria-pressed="${r.rainbow}" aria-label="${x.rack}番台 ${shortDate(window[k])}の${RAINBOW}${r.rainbow ? 'を外す' : 'を付ける'}">${r.rainbow ? RAINBOW : ''}</button>`
             : `<span class="c none" aria-label="${x.rack}番台 ${shortDate(window[k])} 記録なし">·</span>`)).join('')}
@@ -1035,7 +1040,7 @@ function openVariety() {
           ${x.open ? '<span class="chev" aria-hidden="true">›</span></button>' : '</div>'}${r ? rainbowButton(r) : ''}</li>`;
       }).join('')}</ol>`;
   const recordsView = (view, rows) => `<label class="variety-sort">並べ方 <select data-variety-sort aria-label="並べ方">
-      <option value="grid"${view.sort !== 'gap' ? ' selected' : ''}>台番号順（7日表）</option>
+      ${Object.entries(ROTATION_SORTS).map(([key, label]) => `<option value="${key}"${view.sort === key ? ' selected' : ''}>${label}</option>`).join('')}
       <option value="gap"${view.sort === 'gap' ? ' selected' : ''}>最後の🌈が古い順</option></select></label>`
     + (view.sort === 'gap' ? gapView(view, rows) : gridView(view, rows));
   const weekView = (view, rows) => {

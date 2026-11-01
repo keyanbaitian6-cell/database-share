@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=851c671444d4';
+import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=d742103e6abf';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -576,6 +576,20 @@ export function varietyRainbowRows(byDay, store, day) {
         last: last.get(current.rack) ?? null, count: rainbowCounts.get(current.rack) ?? 0};
     })
     .sort((a, b) => a.rack - b.rack);
+}
+
+/**
+ * 7日表の並べ方（2026-11-01 利用者「回転数とかでもソートできるようにしておいてほしい」）。値は端末に覚える。
+ * 回転数は表示中の日の記録の値。記録の無い台（本日の未取得など）は多い順・少ない順のどちらでも最後（PC版の
+ * variety_rainbow の「回転数の多い順・少ない順」と同じ）。同じ回転数は台番号順。
+ */
+export const ROTATION_SORTS = {grid: '台番号順（7日表）', 'games-desc': '回転数の多い順（7日表）', 'games-asc': '回転数の少ない順（7日表）'};
+export function rotationOrder(rows, sort) {
+  if (sort !== 'games-desc' && sort !== 'games-asc') return rows;
+  const sign = sort === 'games-desc' ? -1 : 1;
+  const games = x => (Number.isFinite(x.record?.games) ? x.record.games : null);
+  return [...rows].sort((a, b) => Number(games(a) == null) - Number(games(b) == null)
+    || sign * ((games(a) ?? 0) - (games(b) ?? 0)) || a.rack - b.rack);
 }
 
 /** 本日用の印一覧。未取得の数値行を byDay へ足さず、印だけを別に扱う。 */
