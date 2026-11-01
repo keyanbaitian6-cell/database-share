@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=d742103e6abf';
+import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=38c38e229071';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -590,6 +590,29 @@ export function rotationOrder(rows, sort) {
   const games = x => (Number.isFinite(x.record?.games) ? x.record.games : null);
   return [...rows].sort((a, b) => Number(games(a) == null) - Number(games(b) == null)
     || sign * ((games(a) ?? 0) - (games(b) ?? 0)) || a.rack - b.rack);
+}
+
+/**
+ * 全機種の台一覧（2026-11-01 利用者「バラエティ以外の他の機種を一覧でだしつつ、機種だけみたいときは（プルダウン）で
+ * 切り替えられるように」「媒体は全て」「共有カレンダーには採点はいらないよ」）。その日のバラエティ🌈の機種
+ * （rainbowVarietyMax 台以下の機種）は入れない。並べ方はPC版の機種一覧と同じ（数値の無い台は最後、同じ値は台番号順）。
+ */
+export const ALL_RACKS_SORTS = {
+  rack: '台番号順', 'games-desc': '回転数の多い順', 'games-asc': '回転数の少ない順',
+  'net-desc': '差枚の多い順', 'net-asc': '差枚の少ない順', machine: '機種順',
+};
+export function nonVarietyRacks(racks, store) {
+  const counts = new Map();
+  for (const r of racks) counts.set(r.machine, (counts.get(r.machine) ?? 0) + 1);
+  return racks.filter(r => counts.get(r.machine) > rainbowVarietyMax(store)).sort((a, b) => a.rack - b.rack);
+}
+export function allRacksOrder(rows, sort) {
+  const field = sort.startsWith('games') ? 'games' : sort.startsWith('net') ? 'net' : null;
+  const sign = sort.endsWith('-desc') ? -1 : 1;
+  const value = x => (field && Number.isFinite(x[field]) ? x[field] : null);
+  return [...rows].sort((a, b) => (sort === 'machine' ? a.machine.localeCompare(b.machine, 'ja')
+    : field ? Number(value(a) == null) - Number(value(b) == null) || sign * ((value(a) ?? 0) - (value(b) ?? 0)) : 0)
+    || a.rack - b.rack);
 }
 
 /** 本日用の印一覧。未取得の数値行を byDay へ足さず、印だけを別に扱う。 */
