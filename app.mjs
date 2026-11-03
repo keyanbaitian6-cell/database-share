@@ -1,6 +1,6 @@
-import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=38c38e229071';
-import {updateStatusLines,netHealth} from './capture_health.mjs?v=38c38e229071';
-import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=38c38e229071';
+import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=9009406da312';
+import {updateStatusLines,netHealth} from './capture_health.mjs?v=9009406da312';
+import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=9009406da312';
 // 閲覧専用の共有ページ（お試し、2026-10-09。EVENT_CALENDAR.md「閲覧専用の共有ページ」）。
 // 読むだけのApps Script（database_android/tool/viewer_drive_script_readonly.gs）からDriveのファイルを読み、
 // イベントカレンダー（各日のイベント・総差枚）と、日付を押したときの差枚TOP50（11位からは折りたたみ）・強かった機種10選、
@@ -8,8 +8,8 @@ import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, histor
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=38c38e229071';
-import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=38c38e229071';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=9009406da312';
+import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=9009406da312';
 import {
   MERUHEN_STORES, exchangeValue, calendarDay, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords, lowGamesNote,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
@@ -22,8 +22,8 @@ import {
   SAIWAICHOU_GAP_NET, saiwaichouMachineNet, saiwaichouGrade, saiwaichouGapEnd, saiwaichouGap,
   monthDayList, periodWinRate, winRateYears, yearWinRates, loadFailureText,
   characterBirthdayCellLabel, characterBirthdaysOn, parseCharacterBirthdays,
-  ALL_RACKS_SORTS, allRacksOrder, nonVarietyRacks,
-} from './data.mjs?v=38c38e229071';
+  ALL_RACKS_SORTS, allRacksOrder, nonVarietyRacks, storeDayComment,
+} from './data.mjs?v=9009406da312';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -86,7 +86,7 @@ async function getJson(url) {
  */
 async function loadBirthdays() {
   try {
-    const response = await fetch('./character_birthdays.json?v=38c38e229071', {credentials: 'omit'});
+    const response = await fetch('./character_birthdays.json?v=9009406da312', {credentials: 'omit'});
     if (!response.ok) return;
     state.birthdays = parseCharacterBirthdays(await response.json());
     if (state.model) render();
@@ -214,6 +214,9 @@ function render() {
   const netDays = new Set(monthDayList(state.year, state.month).filter(day => (model.byDay.get(`${state.store}|${day}`) ?? []).some(r => r.net != null))).size;
   const issues = (model.byDay.issues ?? []).filter(i => i.store === state.store && i.day.startsWith(`${state.year}-${String(state.month).padStart(2,'0')}`));
   const conflicts = issues.filter(i => i.kind === 'conflict');
+  // お店のひとこと（2026-11-04）：この店の台データのある最新の日について（data.mjs storeDayComment）。
+  const latestRackDay = [...model.byDay.keys()].filter(k => k.startsWith(state.store + '|')).map(k => k.split('|')[1]).sort().at(-1);
+  const comment = latestRackDay ? storeDayComment(model.byDay, state.store, latestRackDay, model.events.get(`${state.store}|${latestRackDay}`)?.name ?? null) : '';
   const cells = weeks.flat().map(day => {
     if (!day) return '<div class="blank" aria-hidden="true"></div>';
     const racks = model.byDay.get(`${state.store}|${day}`) ?? [];
@@ -251,6 +254,7 @@ function render() {
         <div class="month-stat" data-month-net><span class="stat-label">月間差枚${state.store.startsWith('pscube:') ? '' : '（推定含む）'}</span><span class="stat-value num ${monthNet == null ? '' : tone(monthNet)}">${monthNet == null ? '—' : signed(monthNet)}<small>${monthNet == null ? '' : '枚'}</small></span><span class="stat-detail">${monthNet == null ? '差枚データなし' : `取得分 ${netDays}日・延べ${count(monthNets.length)}台`}</span></div>
         ${exchange ? `<div class="exchange-summary" data-month-exchange><div class="exchange-head"><span>交換額換算（参考）</span><strong class="exchange-value num">${exchangeAmount}</strong></div><p class="exchange-rate">${exchange.loan}枚貸し・${exchange.payout}枚交換 ／ 1枚${exchange.payout === 50 ? '20' : '約17.24'}円で換算</p><p class="exchange-note">取得できた差枚だけの参考額です。<br>実収支ではありません。</p><details class="exchange-info"><summary>換算について</summary><p>過去月も現在指定の交換条件で換算しています。貸出・交換の枚数はそれぞれ1,000円相当として計算。現金投資時の貸出・交換の差は含みません。現金投資か持ちメダル遊技かによって収支は変わります。${state.store.startsWith('pscube:') ? '' : '元の差枚が推定の場合、換算額にも誤差を含みます。'}差枚が分かる台だけの合計を換算し、差枚データがない月は「—」と表示します。</p></details></div>` : ''}
       </div>
+      ${comment ? `<div class="day-comment" data-day-comment><span class="stat-label">ひとこと</span><p>${esc(comment)}</p></div>` : ''}
       <p class="lede">日付を押すと、その日の差枚TOP50と強かった機種10選が見られます。</p>
     </section>
     <div class="stores">

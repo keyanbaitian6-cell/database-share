@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=38c38e229071';
+import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=9009406da312';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -938,4 +938,87 @@ export function storedRainbowMarks(text) {
 
 export function sharedRainbowCanBatch(doc) {
   return doc?.format === 'database-release' && Array.isArray(doc.capabilities) && doc.capabilities.includes('rainbow-storage-v2');
+}
+
+/**
+ * お店のひとこと（2026-11-04、利用者が選んだ「お店の昨日のひとこと」。共有カレンダー・閲覧ページの両方で同じ文。
+ * 閲覧ページは database_android/lib/day_comment.dart。文の決め方は同じ試験データ day_comment_cases.json で照らし合わせる）。
+ *
+ * その日の数字から、言い切れることだけを短く書く。設定や勝ちを言い当てる言い方はしない。
+ * 1. その日の総差枚（差枚の分かる台が半分以上のときだけ。推定なら「（推定）」）と、何台中何台がプラスか。イベントがあれば先に。
+ * 2. この30日（比べられる日＝勝ち負けの分かる台が20台以上の日が10日以上あるとき）の中で、プラスの台の割合が
+ *    高い方（4分の3以上の日より高い）・低い方（4分の3以上の日より低い）・真ん中くらいのどれか。
+ * 3. 1台あたりの平均差枚がいちばんの機種（差枚の分かる台が3台以上の機種。どれもマイナスならそう書く）。
+ * 4. 台番号が4台以上続けてプラスだった所（いちばん長い所）。無ければ、全体より2割以上プラスの割合が高い末尾（8台以上）。
+ * racks：{rack, machine, net（null可）, won（null可）, estimated}。recent：前の30日の {judged, won}。
+ */
+export const COMMENT_RECENT_DAYS = 30, COMMENT_MIN_DAYS = 10, COMMENT_MIN_JUDGED = 20;
+export const COMMENT_MACHINE_MIN = 3, COMMENT_RUN_MIN = 4, COMMENT_SUFFIX_MIN = 8;
+const COMMENT_WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
+export function dayComment({day, event = null, racks, recent = []}) {
+  const judged = racks.filter(r => r.won != null), won = judged.filter(r => r.won).length;
+  if (!judged.length) return '';
+  const nets = racks.filter(r => r.net != null), netsKnown = nets.length * 2 >= judged.length;
+  const est = nets.some(r => r.estimated) ? '（推定）' : '';
+  const [y, m, d] = day.split('-').map(Number);
+  const label = `${m}/${d}（${COMMENT_WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]}）`;
+  const total = nets.reduce((s, r) => s + r.net, 0);
+  const result = `${netsKnown ? `総差枚${signed(total)}枚${est}で、` : ''}${judged.length}台中${won}台がプラスでした。`;
+  const lines = [event ? `${label}はイベント「${event}」の日。${result}` : `${label}は、${result}`];
+  // 割合は整数の掛け算で比べる（閲覧ページの Dart と小数の丸めで食い違わないように）。
+  const others = recent.filter(x => x.judged >= COMMENT_MIN_JUDGED);
+  if (judged.length >= COMMENT_MIN_JUDGED && others.length >= COMMENT_MIN_DAYS) {
+    const lower = others.filter(x => x.won * judged.length < won * x.judged).length;
+    const higher = others.filter(x => x.won * judged.length > won * x.judged).length;
+    const place = lower * 4 >= others.length * 3 ? '高い方' : higher * 4 >= others.length * 3 ? '低い方' : '真ん中くらい';
+    lines.push(`この${COMMENT_RECENT_DAYS}日で記録のある${others.length}日の中では、プラスの台の割合が${place}でした。`);
+  }
+  if (netsKnown) {
+    const byMachine = new Map();
+    for (const r of nets) byMachine.set(r.machine, [...(byMachine.get(r.machine) ?? []), r.net]);
+    const machines = [...byMachine].filter(([, list]) => list.length >= COMMENT_MACHINE_MIN)
+      .map(([machine, list]) => ({machine, count: list.length, average: Math.round(list.reduce((s, n) => s + n, 0) / list.length)}))
+      .sort((a, b) => b.average - a.average || b.count - a.count || (a.machine < b.machine ? -1 : a.machine > b.machine ? 1 : 0));
+    if (machines.length && machines[0].average > 0) {
+      const best = machines[0];
+      lines.push(`機種別では、${displayMachineName(best.machine)}（${best.count}台）が1台あたり${signed(best.average)}枚${est}でいちばんでした。`);
+    } else if (machines.length >= 3) {
+      lines.push(`${COMMENT_MACHINE_MIN}台以上ある機種は、どれも1台あたりではマイナスでした。`);
+    }
+  }
+  const plus = new Set(judged.filter(r => r.won).map(r => r.rack));
+  let run = null;
+  for (const start of [...plus].sort((a, b) => a - b)) {
+    if (plus.has(start - 1)) continue;
+    let end = start;
+    while (plus.has(end + 1)) end++;
+    if (end - start + 1 >= COMMENT_RUN_MIN && (!run || end - start > run.end - run.start)) run = {start, end};
+  }
+  if (run) {
+    lines.push(`${run.start}〜${run.end}番は${run.end - run.start + 1}台続けてプラスでした。`);
+  } else {
+    const bySuffix = new Map();
+    for (const r of judged) bySuffix.set(r.rack % 10, [...(bySuffix.get(r.rack % 10) ?? []), r.won]);
+    const best = [...bySuffix].filter(([, list]) => list.length >= COMMENT_SUFFIX_MIN)
+      .map(([suffix, list]) => ({suffix, judged: list.length, won: list.filter(Boolean).length}))
+      .sort((a, b) => b.won * a.judged - a.won * b.judged || b.judged - a.judged || a.suffix - b.suffix)[0];
+    // 末尾の割合が全体より2割（COMMENT_SUFFIX_GAP）以上高い：(w/j − W/J) × 5 ≥ 1 を整数で。
+    if (best && (best.won * judged.length - won * best.judged) * 5 >= best.judged * judged.length) {
+      lines.push(`末尾${best.suffix}は${best.judged}台中${best.won}台がプラスでした。`);
+    }
+  }
+  return lines.join('');
+}
+
+/** その店の [day] のひとこと（前の30日の勝ち負けと、その日のイベントを添える）。 */
+export function storeDayComment(byDay, store, day, event = null) {
+  const racks = (byDay.get(`${store}|${day}`) ?? []).map(r => ({...r, won: rackWon(r)}));
+  const recent = [];
+  const base = Date.parse(`${day}T00:00:00Z`);
+  for (let back = 1; back <= COMMENT_RECENT_DAYS; back++) {
+    const other = new Date(base - back * 86400000).toISOString().slice(0, 10);
+    const results = (byDay.get(`${store}|${other}`) ?? []).map(rackWon).filter(w => w != null);
+    if (results.length) recent.push({judged: results.length, won: results.filter(Boolean).length});
+  }
+  return dayComment({day, event, racks, recent});
 }

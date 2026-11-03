@@ -7,9 +7,9 @@
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#ffffff">
 <title>database カレンダー</title>
-<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=38c38e229071">
-<link rel="icon" type="image/png" sizes="32x32" href="./favicon.png?v=38c38e229071">
-<link rel="manifest" href="./manifest.json?v=38c38e229071">
+<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=9009406da312">
+<link rel="icon" type="image/png" sizes="32x32" href="./favicon.png?v=9009406da312">
+<link rel="manifest" href="./manifest.json?v=9009406da312">
 <style>
   :root {
     --color-gallery-white: #ffffff;
@@ -106,6 +106,9 @@
   .tools{padding-top:14px}
   .months{padding-bottom:20px}
 
+  /* お店のひとこと（2026-11-04）：月の集計と同じ枠で、文は左寄せ。 */
+  .day-comment { max-width:540px; margin:14px auto 0; padding:14px 16px; border:1px solid var(--color-hairline-silver); border-radius:16px; background:var(--color-paper-frost); text-align:left; }
+  .day-comment p { margin:6px 0 0; font-size:13px; line-height:1.7; color:var(--color-ink); overflow-wrap:anywhere; }
   .data-status { max-width:540px; margin:14px auto 0; color:var(--color-slate); font-size:13px; line-height:1.6; }
   .data-status p { margin:0; }
   .data-warning { max-width:540px; margin:12px auto; padding:12px; border:1px solid #b37413; border-radius:10px; background:#fff8e8; font-size:14px; line-height:1.6; text-align:left; }
@@ -430,6 +433,6 @@
   <p>差枚＝その日の総差枚（差枚がわかった台の合計）。メルヘンはグラフと最大持玉からの推定差枚で、確定値ではありません（※は要確認）。P-STATIONは元グラフの差枚です。</p>
   <p>＊＝前日までに入力した記録がないイベント（当日以降の入力・時刻不明）。強かった機種＝1台あたりの平均回転数（2台以上ある機種）。</p>
 </footer>
-<script type="module" src="./app.mjs?v=38c38e229071"></script>
+<script type="module" src="./app.mjs?v=9009406da312"></script>
 </body>
 </html>
