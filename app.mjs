@@ -1,6 +1,6 @@
-import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=9009406da312';
-import {updateStatusLines,netHealth} from './capture_health.mjs?v=9009406da312';
-import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=9009406da312';
+import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=25aaeb1d0054';
+import {updateStatusLines,netHealth} from './capture_health.mjs?v=25aaeb1d0054';
+import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=25aaeb1d0054';
 // 閲覧専用の共有ページ（お試し、2026-10-09。EVENT_CALENDAR.md「閲覧専用の共有ページ」）。
 // 読むだけのApps Script（database_android/tool/viewer_drive_script_readonly.gs）からDriveのファイルを読み、
 // イベントカレンダー（各日のイベント・総差枚）と、日付を押したときの差枚TOP50（11位からは折りたたみ）・強かった機種10選、
@@ -8,14 +8,14 @@ import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, histor
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=9009406da312';
-import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=9009406da312';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=25aaeb1d0054';
+import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=25aaeb1d0054';
 import {
   MERUHEN_STORES, exchangeValue, calendarDay, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords, lowGamesNote,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
   IDLE_DAY_CHOICES, IDLE_DEFAULT_DAYS, IDLE_DEFAULT_GAMES, IDLE_GAMES_CHOICES, idleVarietyRacks, storeDays,
   sharedRainbowCanBatch, storedRainbowMarks, sendRainbowBatches, RAINBOW, lastRainbowDay, lastRainbowText, rackMark, storeHasRainbow,
-  RAINBOW_COUNT_DAYS, applyRainbowMarks, markTime, mergeMarks, varietyRecordRows,
+  RAINBOW_COUNT_DAYS, applyRainbowMarks, markTime, mergeMarks, varietyRecordRows, rackSuffix,
   ROTATION_DAYS, ROTATION_SORTS, byLongestGap, daysSinceRainbow, rackDays, rainbowVarietyMax, rotationOrder, windowDays,
   SUFFIX_PERIODS, hasSuffixSummary, suffixesOf, zoromeEndingsOf, suffixLabel, suffixReport,
   varietyWeek, varietyMaxRacksFor, rainbowTodayRows,
@@ -23,7 +23,7 @@ import {
   monthDayList, periodWinRate, winRateYears, yearWinRates, loadFailureText,
   characterBirthdayCellLabel, characterBirthdaysOn, parseCharacterBirthdays,
   ALL_RACKS_SORTS, allRacksOrder, nonVarietyRacks, storeDayComment,
-} from './data.mjs?v=9009406da312';
+} from './data.mjs?v=25aaeb1d0054';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -86,7 +86,7 @@ async function getJson(url) {
  */
 async function loadBirthdays() {
   try {
-    const response = await fetch('./character_birthdays.json?v=9009406da312', {credentials: 'omit'});
+    const response = await fetch('./character_birthdays.json?v=25aaeb1d0054', {credentials: 'omit'});
     if (!response.ok) return;
     state.birthdays = parseCharacterBirthdays(await response.json());
     if (state.model) render();
@@ -251,7 +251,7 @@ function render() {
       ${issues.length ? `<details class="data-warning" data-record-issues><summary>${conflicts.length ? `内容が異なる${conflicts.length}台分を集計から除外しています` : '同一記録の重複を1件として集計しています'}</summary>${issues.map(i => `<p>${esc(i.day)} ${i.rack}番 ${esc(displayMachineName(i.machine))}：${i.kind === 'conflict' ? '内容が競合・集計保留' : '同一内容の重複'}（${i.count}件）</p>`).join('')}<p>保存元の記録は削除していません。</p></details>` : ''}
       <div class="month-stats" aria-label="月間の集計">
         <div class="month-stat" data-month-rate><span class="stat-label">月間勝率</span><span class="stat-value num">${monthRate.judged ? winRateText(monthRate.won, monthRate.judged).replace('勝率', '') : '—'}</span><span class="stat-detail">${monthRate.judged ? `${monthRate.days}日分・${count(monthRate.won)} / ${count(monthRate.judged)}台プラス` : '勝率データなし'}</span></div>
-        <div class="month-stat" data-month-net><span class="stat-label">月間差枚${state.store.startsWith('pscube:') ? '' : '（推定含む）'}</span><span class="stat-value num ${monthNet == null ? '' : tone(monthNet)}">${monthNet == null ? '—' : signed(monthNet)}<small>${monthNet == null ? '' : '枚'}</small></span><span class="stat-detail">${monthNet == null ? '差枚データなし' : `取得分 ${netDays}日・延べ${count(monthNets.length)}台`}</span></div>
+        <div class="month-stat" data-month-net><span class="stat-label">月間差枚${!state.store.startsWith('pscube:') || monthNets.some(r => r.estimated) ? '（推定含む）' : ''}</span><span class="stat-value num ${monthNet == null ? '' : tone(monthNet)}">${monthNet == null ? '—' : signed(monthNet)}<small>${monthNet == null ? '' : '枚'}</small></span><span class="stat-detail">${monthNet == null ? '差枚データなし' : `取得分 ${netDays}日・延べ${count(monthNets.length)}台`}</span></div>
         ${exchange ? `<div class="exchange-summary" data-month-exchange><div class="exchange-head"><span>交換額換算（参考）</span><strong class="exchange-value num">${exchangeAmount}</strong></div><p class="exchange-rate">${exchange.loan}枚貸し・${exchange.payout}枚交換 ／ 1枚${exchange.payout === 50 ? '20' : '約17.24'}円で換算</p><p class="exchange-note">取得できた差枚だけの参考額です。<br>実収支ではありません。</p><details class="exchange-info"><summary>換算について</summary><p>過去月も現在指定の交換条件で換算しています。貸出・交換の枚数はそれぞれ1,000円相当として計算。現金投資時の貸出・交換の差は含みません。現金投資か持ちメダル遊技かによって収支は変わります。${state.store.startsWith('pscube:') ? '' : '元の差枚が推定の場合、換算額にも誤差を含みます。'}差枚が分かる台だけの合計を換算し、差枚データがない月は「—」と表示します。</p></details></div>` : ''}
       </div>
       ${comment ? `<div class="day-comment" data-day-comment><span class="stat-label">ひとこと</span><p>${esc(comment)}</p></div>` : ''}
@@ -344,6 +344,19 @@ function tapList(rows, start = 1) {
           <span class="chev" aria-hidden="true">›</span></button></li>`).join('')}</ol>`;
 }
 
+/*
+ * 差枚の一覧で選んだ台番の末尾（2026-11-05 利用者「差枚一覧で選んだ末尾を、機種一覧でも追えるようにする」）。
+ * 日の画面（TOP50）で 0〜9 を1つ選ぶと、その末尾の台番の横に小さな印。同じ店・同じ日の機種の台一覧・全機種の台一覧にも
+ * 引き継ぐ（台は全部出したまま）。「末尾7 ×」で解除。日付を変える・シートを閉じる（店を変える）と解除。
+ */
+const suffixMark = (r, digit) => (digit != null && rackSuffix(r.rack) === digit
+  ? `<span class="suffix-mark" title="末尾${digit}">末${digit}</span>` : '');
+const suffixClear = (digit) => (digit == null ? ''
+  : `<p class="suffix-pick"><button type="button" class="pill pill-outline suffix-clear" data-suffix-clear aria-label="末尾${digit}の印を消す">末尾${digit} ×</button></p>`);
+const suffixPicker = (digit) => `<div class="suffix-pick" role="group" aria-label="台番の末尾で印を付ける"><span class="suffix-label">末尾</span>${
+  Array.from({length: 10}, (_, d) => `<button type="button" class="pill ${d === digit ? 'pill-blue' : 'pill-outline'} suffix-digit" data-suffix-digit="${d}" aria-pressed="${d === digit}">${d}</button>`).join('')}</div>
+      ${suffixClear(digit)}`;
+
 /** `2026-10-09` → `10月9日（金）`。 */
 function dateLabel(day) {
   const [y, m, d] = day.split('-').map(Number);
@@ -375,7 +388,7 @@ function rackView({rack: r}) {
         <span class="value num ${r.net != null ? tone(r.net) : 'zero'}">${r.net != null ? `${signed(r.net)}${r.needsCheck ? '※' : ''}` : '—'}</span>
         ${r.net == null ? `<span class="sub">${name}はわかりません。</span>` : ''}</p>
       <dl class="stats">${stats.map(([k, v]) => `<div><dt>${k}</dt><dd class="num">${v}</dd></div>`).join('')}</dl>
-      ${r.estimated && r.net != null ? `<p class="note">推定差枚はグラフと最大持玉からの計算で、確定値ではありません${r.needsCheck ? '（※は要確認）' : ''}。</p>` : ''}`;
+      ${r.estimated && r.net != null ? `<p class="note">推定差枚は${r.store?.startsWith('pscube:') ? 'アナスロのグラフとBB・RB・G数からの計算で、アナスロの集計時点の値です。閉店後とは前後50枚ほどずれることがあり' : 'グラフと最大持玉からの計算で'}、確定値ではありません${r.needsCheck ? '（※は要確認）' : ''}。</p>` : ''}`;
 }
 
 /*
@@ -468,7 +481,7 @@ function titleOfView(view) {
  * 重ねた画面では「閉じる」を隠し、戻るだけにする（閉じると一覧ごと消えて「戻る」との違いが分かりにくいため、2026-10-22 利用者指摘）。
  * 台のデータの画面 {kind: 'rack', rack, list} は、開いた一覧の並び（list）で「前の台・次の台」へ送る（rackNeighbor）。
  */
-function openSheet({first, body, onRow, onChange, onAction}) {
+function openSheet({first, body, onRow, onChange, onAction, onSuffix}) {
   const views = [first];
   const backdrop = document.createElement('div');
   backdrop.className = 'sheet-backdrop';
@@ -608,6 +621,14 @@ function openSheet({first, body, onRow, onChange, onAction}) {
       }
       view.scroll = sheet.scrollTop;
       toggleRainbow(mark.dataset.rainbow);
+      render();
+      return;
+    }
+    // 台番の末尾の印（日の画面）。スクロール位置はそのまま描き直す。
+    const suffix = e.target.closest('[data-suffix-digit], [data-suffix-clear]');
+    if (suffix && onSuffix) {
+      view.scroll = sheet.scrollTop;
+      onSuffix(suffix, view);
       render();
       return;
     }
@@ -754,9 +775,15 @@ async function flushHistoryEdits() {
 function openDay(first) {
   const racksOf = (day) => state.model.byDay.get(`${state.store}|${day}`) ?? [];
   if (!racksOf(first).length) return;
-  const rankRows = (list, from, index) => list.map((r, i) => ({
+  // 選んだ末尾（{day, digit}）。このシートの中だけ（閉じる・店を変えると消える）。日付を変えたら消す（suffixOf）。
+  let suffix = null;
+  const suffixOf = (view) => {
+    if (suffix && suffix.day !== view.day) suffix = null;
+    return suffix?.digit ?? null;
+  };
+  const rankRows = (list, from, index, digit) => list.map((r, i) => ({
     lead: from + i + 1, attrs: `data-machine-of="${index.get(r)}"`,
-    main: `<span class="rack num">${r.rack}番${rackMark(r)}</span><span class="machine" style="display:block">${esc(displayMachineName(r.machine))}</span>`,
+    main: `<span class="rack num">${r.rack}番${rackMark(r)}${suffixMark(r, digit)}</span><span class="machine" style="display:block">${esc(displayMachineName(r.machine))}</span>`,
     right: `${netCell(r)}<span class="small num">${count(r.games)}G</span>`,
   }));
   const netNameOf = (racks) => (racks.some(r => r.estimated) ? '推定差枚' : '差枚');
@@ -770,6 +797,7 @@ function openDay(first) {
     const estimated = racks.some(r => r.estimated);
     const netName = netNameOf(racks);
     const event = eventLabel(state.model.events.get(`${state.store}|${view.day}`));
+    const digit = suffixOf(view);
     return `
       <p class="store">${esc(storeLabel(state.store))}</p>
       <h2 id="sheet-title">${dateLabel(view.day)}</h2>
@@ -782,11 +810,12 @@ function openDay(first) {
         <span class="value num zero">${winRateText(net.won, net.judged)}</span>
         <span class="sub num">${net.judged}台中${net.won}台プラス（${netName}の分からない台が多い日）</span></p>` : ''}
       <h3>TOP50</h3>
-      <p class="caption">${netName}の多い順。台を押すと、その機種の台一覧が見られます。</p>
-      ${top.length ? tapList(rankRows(top.slice(0, TOP_RACKS_OPEN), 0, index))
+      <p class="caption">${netName}の多い順。台を押すと、その機種の台一覧が見られます。末尾を選ぶと、その末尾の台番に印が付きます（機種の台一覧にも引き継ぎます）。</p>
+      ${top.length ? suffixPicker(digit) : ''}
+      ${top.length ? tapList(rankRows(top.slice(0, TOP_RACKS_OPEN), 0, index, digit))
         : '<p class="note">この日は差枚がわかる台がありません。</p>'}
       ${top.length > TOP_RACKS_OPEN ? `<details class="more"><summary>${TOP_RACKS_OPEN + 1}〜${top.length}位を見る（${top.length - TOP_RACKS_OPEN}台）</summary>
-        ${tapList(rankRows(top.slice(TOP_RACKS_OPEN), TOP_RACKS_OPEN, index), TOP_RACKS_OPEN + 1)}</details>` : ''}
+        ${tapList(rankRows(top.slice(TOP_RACKS_OPEN), TOP_RACKS_OPEN, index, digit), TOP_RACKS_OPEN + 1)}</details>` : ''}
       <h3>強かった機種10選</h3>
       <p class="caption">1台あたりの平均回転数（2台以上ある機種）</p>
       ${machines.length ? tapList(machines.map((x, i) => ({
@@ -801,7 +830,7 @@ function openDay(first) {
       ${tapList([{lead: '', attrs: 'data-all-racks', main: '<span class="machine" style="display:block">全機種の台一覧を見る</span>',
         right: `<span class="small num">${new Set(others.map(r => r.machine)).size}機種・${others.length}台</span>`}])}` : '';
       })()}
-      ${estimated ? '<p class="note">推定差枚はグラフと最大持玉からの計算で、確定値ではありません（※は要確認）。</p>' : ''}`;
+      ${estimated ? `<p class="note">推定差枚は${racks.some(x => x.store?.startsWith('pscube:')) ? 'アナスロのグラフとBB・RB・G数からの計算で、アナスロの集計時点の値です。閉店後とは前後50枚ほどずれることがあり' : 'グラフと最大持玉からの計算で'}、確定値ではありません（※は要確認）。</p>` : ''}`;
   };
 
   const machineView = (view) => {
@@ -818,6 +847,7 @@ function openDay(first) {
       <p class="store">${esc(storeLabel(state.store))}　${dateLabel(view.day)}</p>
       <h2 id="sheet-title" class="long">${esc(displayMachineName(view.machine))}</h2>
       <p class="event-line num">${list.length}台・平均${count(average)}G</p>
+      ${suffixClear(suffixOf(view))}
       ${total != null ? `<p class="total"><span class="label">この機種の総${netName}</span>
         <span class="value num ${tone(total)}">${signed(total)}</span>
         <span class="sub num">${netName}がわかった台 ${nets.length}/${list.length}台</span></p>` : ''}
@@ -825,7 +855,7 @@ function openDay(first) {
       <p class="caption">台番号の順。台を押すと、その台のデータが見られます。</p>
       ${tapList(list.map(r => ({
         lead: '', attrs: `data-rack="${index.get(r)}"`, current: !!view.picked && r.rack === view.picked.rack,
-        main: `<span class="machine num" style="display:block">${r.rack}番${rackMark(r)}</span><span class="rack num">BB ${r.bb}・RB ${r.rb}</span>`,
+        main: `<span class="machine num" style="display:block">${r.rack}番${rackMark(r)}${suffixMark(r, suffixOf(view))}</span><span class="rack num">BB ${r.bb}・RB ${r.rb}</span>`,
         right: `${netCell(r)}<span class="small num">${count(r.games)}G</span>`,
       })))}`;
   };
@@ -856,9 +886,10 @@ function openDay(first) {
       <label class="variety-sort">並べ方 <select data-all-sort aria-label="並べ方">
         ${Object.entries(ALL_RACKS_SORTS).map(([key, label]) => `<option value="${key}"${view.sort === key ? ' selected' : ''}>${label.replace('差枚', netName)}</option>`).join('')}</select></label>
       <p class="caption">バラエティ（${rainbowVarietyMax(state.store) === 1 ? '1台だけ' : `1〜${rainbowVarietyMax(state.store)}台`}の機種）はバラエティ${RAINBOW}にあります。台を押すと、その台のデータが見られます。</p>
+      ${suffixClear(suffixOf(view))}
       ${list.length ? tapList(list.map(r => ({
         lead: '', attrs: `data-rack="${index.get(r)}"`,
-        main: `<span class="machine num" style="display:block">${r.rack}番${rackMark(r)}</span><span class="rack">${esc(displayMachineName(r.machine))}</span><span class="rack num" style="display:block">BB ${r.bb}・RB ${r.rb}</span>`,
+        main: `<span class="machine num" style="display:block">${r.rack}番${rackMark(r)}${suffixMark(r, suffixOf(view))}</span><span class="rack">${esc(displayMachineName(r.machine))}</span><span class="rack num" style="display:block">BB ${r.bb}・RB ${r.rb}</span>`,
         right: `${netCell(r)}<span class="small num">${count(r.games)}G</span>`,
       }))) : '<p class="note">この日はバラエティ以外の台の記録がありません。</p>'}`;
   };
@@ -878,6 +909,9 @@ function openDay(first) {
         const picked = racks[Number(row.dataset.machineOf)];
         push({kind: 'machine', machine: picked.machine, picked, day: view.day});
       } else push({kind: 'machine', machine: row.dataset.machine, day: view.day});
+    },
+    onSuffix: (button, view) => {
+      suffix = button.matches('[data-suffix-clear]') ? null : {day: view.day, digit: Number(button.dataset.suffixDigit)};
     },
     onChange: (select, view) => {
       if (select.matches('[data-all-machine]')) view.only = select.value;

@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=9009406da312';
+import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=25aaeb1d0054';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -122,6 +122,15 @@ export function lastRainbowText(last, day) {
 }
 
 /** P’s CUBEの閲覧用ファイル（pscube-viewer-drive.json）の台。差枚は元グラフの差枚。店舗は `pscube:店:貸玉`。 */
+/** アナスロで補った台の推定差枚（PC anaslo_net.valid・閲覧ページ validPscubeNetEstimate と同じ形、2026-11-06）。 */
+export function pscubeNetEstimate(raw) {
+  const e = raw?.net_estimate;
+  if (raw?.source_site !== 'anaslo' || raw?.net_medals != null || !e || typeof e !== 'object') return null;
+  if (Object.keys(e).length !== 3 || !Number.isInteger(e.value) || Math.abs(e.value) > 1000000 ||
+      typeof e.sure !== 'boolean' || e.method !== 'anaslo-graph-v1') return null;
+  return {value: e.value, sure: e.sure};
+}
+
 export function pscubeRecords(doc) {
   if (!doc || doc.format !== 'pscube-viewer' || !Array.isArray(doc.records)) return [];
   const result = [];
@@ -131,10 +140,12 @@ export function pscubeRecords(doc) {
     if (rack == null || typeof raw.machine !== 'string') continue;
     // 利用者が外すと決めた機種（閲覧ページの pscubeViewerRecords と同じ）。
     if (['沖ドキ', 'オキドキ'].some(word => displayMachineName(raw.machine).includes(word))) continue;
+    // 本当の差枚が無い補完の台は推定差枚（確かでなければ※）。合計・順位にも入る（2026-11-06 利用者「全部入れる」）。
+    const estimate = pscubeNetEstimate(raw);
     result.push({
       store: `pscube:${raw.store}:${raw.rate}`, day: raw.day, machine: raw.machine, rack,
       games: int(raw.games) ?? 0, bb: int(raw.bb) ?? 0, rb: int(raw.rb) ?? 0, output: int(raw.my),
-      net: int(raw.net_medals), needsCheck: false, estimated: false,
+      net: int(raw.net_medals) ?? estimate?.value ?? null, needsCheck: estimate ? !estimate.sure : false, estimated: !!estimate,
       net_capture:raw.net_capture ?? null,source_site:raw.source_site,
     });
   }
@@ -306,6 +317,9 @@ export function winRateYears(byDay, summaries, store) {
   }
   return [...years].sort((a, b) => b - a);
 }
+
+/** 台番の末尾（0〜9）。差枚の一覧で選んだ末尾の台に印を付ける（2026-11-05）。 */
+export const rackSuffix = (rack) => Math.abs(Math.trunc(rack)) % 10;
 
 /** その日の差枚TOP50（差枚の多い順）と強かった機種10選（1台あたりの平均回転数、2台以上の機種）。 */
 export function daySummary(racks) {
