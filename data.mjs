@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=3cb7146d4d91';
+import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=6d4e3feb4a92';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -122,12 +122,14 @@ export function lastRainbowText(last, day) {
 }
 
 /** P’s CUBEの閲覧用ファイル（pscube-viewer-drive.json）の台。差枚は元グラフの差枚。店舗は `pscube:店:貸玉`。 */
-/** アナスロで補った台の推定差枚（PC anaslo_net.valid・閲覧ページ validPscubeNetEstimate と同じ形、2026-11-06）。 */
+/** 補った台の推定差枚（PC anaslo_net.valid・site777_net.valid、閲覧ページ validPscubeNetEstimate・
+ *  validSite777NetEstimate と同じ形）。アナスロ（2026-11-06）とサイトセブン（画像の目盛り、2026-11-07）。方式は出典と合わせる。 */
 export function pscubeNetEstimate(raw) {
   const e = raw?.net_estimate;
-  if (raw?.source_site !== 'anaslo' || raw?.net_medals != null || !e || typeof e !== 'object') return null;
+  const method = {anaslo: 'anaslo-graph-v1', site777: 'site777-axis-pixels-v1'}[raw?.source_site];
+  if (!method || raw?.net_medals != null || !e || typeof e !== 'object') return null;
   if (Object.keys(e).length !== 3 || !Number.isInteger(e.value) || Math.abs(e.value) > 1000000 ||
-      typeof e.sure !== 'boolean' || e.method !== 'anaslo-graph-v1') return null;
+      typeof e.sure !== 'boolean' || e.method !== method || (raw.source_site === 'site777' && e.value % 50 !== 0)) return null;
   return {value: e.value, sure: e.sure};
 }
 
