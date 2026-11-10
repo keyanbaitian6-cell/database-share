@@ -7,9 +7,9 @@
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#ffffff">
 <title>database カレンダー</title>
-<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=80e925e38917">
-<link rel="icon" type="image/png" sizes="32x32" href="./favicon.png?v=80e925e38917">
-<link rel="manifest" href="./manifest.json?v=80e925e38917">
+<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=e0cf62eb25f3">
+<link rel="icon" type="image/png" sizes="32x32" href="./favicon.png?v=e0cf62eb25f3">
+<link rel="manifest" href="./manifest.json?v=e0cf62eb25f3">
 <style>
   :root {
     --color-gallery-white: #ffffff;
@@ -43,6 +43,9 @@
     font-family: var(--font-text); font-size: 17px; line-height: 1.47; letter-spacing: -0.374px;
     font-feature-settings: "palt"; -webkit-font-smoothing: antialiased;
   }
+  /* 読み込み文の余白が上へ抜けず、本文の完成でフッターが画面内を横切らないようにする。 */
+  #app { display: flow-root; }
+  #app:has(> .status) { min-height: calc(100vh - 53px); }
   button { font: inherit; color: inherit; letter-spacing: inherit; }
   .num { font-variant-numeric: tabular-nums; }
   .plus { color: var(--color-apple-blue); }
@@ -440,6 +443,6 @@
   <p>差枚＝その日の総差枚（差枚がわかった台の合計）。メルヘンはグラフと最大持玉から計算した推定値を含みます（※は要確認）。P-STATIONは元グラフの差枚のほか、サイトセブンのグラフ画像やアナスロの情報からの推定値を含む場合があります。推定の計算方法は台・日付の詳細で確認できます。</p>
   <p>＊＝前日までに入力した記録がないイベント（当日以降の入力・時刻不明）。強かった機種＝1台あたりの平均回転数（2台以上ある機種）。</p>
 </footer>
-<script type="module" src="./app.mjs?v=80e925e38917"></script>
+<script type="module" src="./app.mjs?v=e0cf62eb25f3"></script>
 </body>
 </html>
