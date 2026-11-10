@@ -7,9 +7,9 @@
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#ffffff">
 <title>database カレンダー</title>
-<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=d653338c4a39">
-<link rel="icon" type="image/png" sizes="32x32" href="./favicon.png?v=d653338c4a39">
-<link rel="manifest" href="./manifest-android.json?v=d653338c4a39">
+<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=80e925e38917">
+<link rel="icon" type="image/png" sizes="32x32" href="./favicon.png?v=80e925e38917">
+<link rel="manifest" href="./manifest-android.json?v=80e925e38917">
 <style>
   :root {
     --color-gallery-white: #ffffff;
@@ -409,14 +409,15 @@
     .stage { padding: 24px 8px 32px; }
     .day, .blank { min-height: 76px; padding: 6px 3px; }
     .day .date { font-size: 13px; }
-    .day .event { font-size: 10px; }
-    .day .birthday { font-size: 9px; }
-    .day .net { font-size: 10.5px; letter-spacing: -0.3px; }
-    .weekdays span { font-size: 11px; }
+    .day .event { font-size: 12px; }
+    .day .birthday { font-size: 11px; }
+    .day .net { font-size: 12px; letter-spacing: -0.1px; }
+    .weekdays span { font-size: 12px; }
   }
 /* 4大オススメは既存の機種カード・週表の形を保つ。 */
 .recommendation-card{border:1px solid #dce4ef;border-radius:12px;padding:10px;margin:14px 0}.recommendation-card>h3{display:block!important;font-size:15px;margin:0 0 12px;line-height:1.5}.recommendation-card .history-overflow{overflow-x:auto;border:0}.recommendation-card>label{display:block;font-weight:600;margin-bottom:12px}.recommendation-card select{display:block;width:100%;max-width:100%;margin-top:6px}.recommendation-table{width:100%;min-width:340px;table-layout:fixed;border-collapse:separate;border-spacing:2px}.recommendation-table th{font-size:11px;font-weight:500;text-align:center}.recommendation-table th:first-child{width:44px}.recommendation-table small{display:block;font-size:10px}.recommendation-cell{display:flex!important;flex-direction:column;align-items:center;justify-content:center;gap:2px;width:100%;min-height:56px;padding:4px 1px!important;border:0;border-radius:6px;background:#f4f7fb;font-size:19px}.recommendation-face{width:100%;font-size:17px;padding:4px 0;min-height:40px}.recommendation-pick{position:relative;display:flex;align-items:center;justify-content:center;min-height:40px;margin-bottom:2px;border-radius:6px;background:#f4f7fb;overflow:hidden}.recommendation-face-shown{display:flex;align-items:center;font-size:19px;line-height:1;white-space:nowrap;pointer-events:none}.recommendation-caret{font-size:9px;margin-left:1px;color:#64748b}.recommendation-card .recommendation-pick select.recommendation-face{position:absolute;inset:0;width:100%;height:100%;min-height:0;margin:0;padding:0;opacity:0;font-size:16px;-webkit-appearance:none;appearance:none}.recommendation-cell{min-height:30px!important}.recommendation-cell .num{font-size:10px;white-space:nowrap}.recommendation-table .plus{color:#15803d}.recommendation-table .minus{color:#b91c1c}
 .recommendation-table{border-spacing:0 6px}.recommendation-table tbody th,.recommendation-table tbody td{padding:5px 1px}.recommendation-table tbody tr:nth-child(odd) th,.recommendation-table tbody tr:nth-child(odd) td{background:#e6eef8}.recommendation-table tbody th{border-radius:12px 0 0 12px;padding-left:4px}.recommendation-table tbody td:last-child{border-radius:0 12px 12px 0;padding-right:4px}.recommendation-table tbody tr:nth-child(odd) .recommendation-pick,.recommendation-table tbody tr:nth-child(odd) .recommendation-cell{background:#fff}
+  .sheet .note { font-size:14px; line-height:1.6; }
   /* 台番の末尾の印（2026-11-05） */
   .suffix-pick { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 12px; }
   .suffix-pick .suffix-label { font-size: 14px; color: var(--color-slate); margin-right: 2px; }
@@ -436,9 +437,9 @@
 <footer>
   <p>Googleドライブから読むため、最初の読み込みや「最新を読む」は、1分ほどかかることがあります。</p>
   <p>台の数値は閲覧用です。対応する🌈・顔文字・履歴の印は編集して共有できます。表示用の台データ・イベント・編集内容や接続先を端末に保存し、次回の表示やオフライン閲覧に使います。</p>
-  <p>差枚＝その日の総差枚（差枚がわかった台の合計）。メルヘンはグラフと最大持玉からの推定差枚で、確定値ではありません（※は要確認）。P-STATIONは元グラフの差枚です。</p>
+  <p>差枚＝その日の総差枚（差枚がわかった台の合計）。メルヘンはグラフと最大持玉から計算した推定値を含みます（※は要確認）。P-STATIONは元グラフの差枚のほか、サイトセブンのグラフ画像やアナスロの情報からの推定値を含む場合があります。推定の計算方法は台・日付の詳細で確認できます。</p>
   <p>＊＝前日までに入力した記録がないイベント（当日以降の入力・時刻不明）。強かった機種＝1台あたりの平均回転数（2台以上ある機種）。</p>
 </footer>
-<script type="module" src="./app.mjs?v=d653338c4a39"></script>
+<script type="module" src="./app.mjs?v=80e925e38917"></script>
 </body>
 </html>

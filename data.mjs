@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=d653338c4a39';
+import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=80e925e38917';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -161,23 +161,41 @@ export function pscubeRecords(doc) {
 export function indexRecords(records) {
   const byDay = new Map(), groups = new Map();
   byDay.issues = [];
-  // 値の同一性はプロパティの順序に依存させない。入力を変更しない。
   const canonical = v => Array.isArray(v) ? v.map(canonical) : v && typeof v === 'object'
     ? Object.fromEntries(Object.keys(v).sort().map(k => [k, canonical(v[k])])) : v;
+  // 通常の1件だけの台は本文を文字列化しない。重複したキーだけ全内容を比較する。
   for (const r of records) {
     const id = JSON.stringify([r.store, r.day, r.machine, r.rack]);
-    if (!groups.has(id)) groups.set(id, []);
-    groups.get(id).push(r);
+    const group = groups.get(id);
+    if (!group) groups.set(id, {record:r, count:1, signature:null, conflict:false});
+    else {
+      group.count++;
+      group.signature ??= JSON.stringify(canonical(group.record));
+      if (JSON.stringify(canonical(r)) !== group.signature) group.conflict = true;
+    }
   }
-  for (const rows of groups.values()) {
-    const r = rows[0], key = `${r.store}|${r.day}`;
-    const conflict = rows.some(x => JSON.stringify(canonical(x)) !== JSON.stringify(canonical(r)));
-    if (rows.length > 1) byDay.issues.push({store:r.store, day:r.day, rack:r.rack, machine:r.machine,
-      kind:conflict ? 'conflict' : 'duplicate', count:rows.length});
+  for (const {record:r, count, conflict} of groups.values()) {
+    const key = `${r.store}|${r.day}`;
+    if (count > 1) byDay.issues.push({store:r.store, day:r.day, rack:r.rack, machine:r.machine,
+      kind:conflict ? 'conflict' : 'duplicate', count});
     if (!byDay.has(key)) byDay.set(key, []);
     if (!conflict && !implausible(r)) byDay.get(key).push(r);
   }
   return byDay;
+}
+
+/** 混在する取得元を列挙する。画像由来にアナスロの誤差を流用しない。 */
+export function netEstimateNote(records) {
+  const sources = new Set(records.filter(r => r.estimated && r.net != null).map(r =>
+    !r.store?.startsWith('pscube:') ? 'meruhen' : r.source_site ?? 'unknown'));
+  if (!sources.size) return '';
+  const notes = {
+    site777:'サイトセブンの推定差枚は、グラフ画像の目盛りと線の終点から計算しています。1枚単位の表示でも、1枚単位の精度を保証するものではありません。',
+    anaslo:'アナスロの推定差枚は、グラフとBB・RB・G数から計算した集計時点の値です。閉店後の値とずれる場合があります。',
+    meruhen:'メルヘンの推定差枚は、グラフと最大持玉から計算しています。',
+    unknown:'推定差枚には、取得元の情報から計算した値を含みます。',
+  };
+  return [...sources].map(site => notes[site] ?? notes.unknown).join('') + '推定値は確定値ではありません。※は要確認の値です。';
 }
 
 /** 交換単価は丸めず、表示だけ丸める。小額は円で符号を保持する。 */
