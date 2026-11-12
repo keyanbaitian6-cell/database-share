@@ -1,6 +1,6 @@
 // 公開stageで内容由来の版と正確なファイルURLに置換する。Google通信は保存・中継しない。
-const VERSION = '32519bd6c370';
-const FILES = ["./index.html", "./android.html", "./app.mjs?v=32519bd6c370", "./apple-touch-icon.png?v=32519bd6c370", "./capture_health.mjs?v=32519bd6c370", "./character_birthdays.json?v=32519bd6c370", "./daily_learning.mjs?v=32519bd6c370", "./data.mjs?v=32519bd6c370", "./event_history.mjs?v=32519bd6c370", "./favicon.png?v=32519bd6c370", "./icon-192.png?v=32519bd6c370", "./icon-512.png?v=32519bd6c370", "./manifest-android.json?v=32519bd6c370", "./manifest.json?v=32519bd6c370", "./net.mjs?v=32519bd6c370", "./offline.mjs?v=32519bd6c370", "./recommendations.mjs?v=32519bd6c370", "./viewer_parts.mjs?v=32519bd6c370"];
+const VERSION = '386ade7eb470';
+const FILES = ["./index.html", "./android.html", "./app.mjs?v=386ade7eb470", "./apple-touch-icon.png?v=386ade7eb470", "./capture_health.mjs?v=386ade7eb470", "./character_birthdays.json?v=386ade7eb470", "./daily_learning.mjs?v=386ade7eb470", "./data.mjs?v=386ade7eb470", "./event_history.mjs?v=386ade7eb470", "./favicon.png?v=386ade7eb470", "./icon-192.png?v=386ade7eb470", "./icon-512.png?v=386ade7eb470", "./manifest-android.json?v=386ade7eb470", "./manifest.json?v=386ade7eb470", "./net.mjs?v=386ade7eb470", "./offline.mjs?v=386ade7eb470", "./recommendations.mjs?v=386ade7eb470", "./viewer_parts.mjs?v=386ade7eb470"];
 const PREFIX = 'database-share-shell-' + new URL(self.registration.scope).pathname + '-';
 const CACHE = PREFIX + VERSION;
 self.addEventListener('install', event => {

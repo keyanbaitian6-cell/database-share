@@ -7,9 +7,9 @@
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#ffffff">
 <title>database カレンダー</title>
-<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=32519bd6c370">
-<link rel="icon" type="image/png" sizes="32x32" href="./favicon.png?v=32519bd6c370">
-<link rel="manifest" href="./manifest.json?v=32519bd6c370">
+<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=386ade7eb470">
+<link rel="icon" type="image/png" sizes="32x32" href="./favicon.png?v=386ade7eb470">
+<link rel="manifest" href="./manifest.json?v=386ade7eb470">
 <style>
   :root {
     --color-gallery-white: #ffffff;
@@ -116,6 +116,50 @@
   .data-status p { margin:0; }
   .data-warning { max-width:540px; margin:12px auto; padding:12px; border:1px solid #b37413; border-radius:10px; background:#fff8e8; font-size:14px; line-height:1.6; text-align:left; }
   .data-warning p { margin:6px 0; }
+  /* 日次学習・採用中の候補（2026-11-12。4画面で同じ順：切り替え → 重要な注意 → 候補数 → 機種ごとの候補 → 開閉式の説明）。 */
+  dialog.daily-sheet {
+    width: min(760px, calc(100% - 16px)); max-width: none; max-height: 92vh; max-height: 92dvh; overflow: hidden; overflow-wrap: anywhere;
+    margin: auto; padding: 0; border: 0; border-radius: var(--radius-cards);
+    background: var(--color-gallery-white); color: var(--color-ink); overscroll-behavior: contain;
+  }
+  /* 閉じる帯をスクロール領域から外す。候補の末尾でも必ず閉じられる（iPhone、2026-11-12）。 */
+  dialog.daily-sheet[open] { display: flex; flex-direction: column; }
+  dialog.daily-sheet::backdrop { background: rgba(0, 0, 0, 0.32); }
+  .daily-sheet .sheet-head { position: static; flex: 0 0 auto; margin: 0; padding: 16px var(--gutter) 10px; }
+  .daily-sheet [data-daily-close] { flex-shrink: 0; min-height: 44px; }
+  .daily-sheet .daily-content {
+    display: grid; align-content: start; gap: 14px; min-width: 0; min-height: 0; flex: 1 1 auto;
+    padding: 14px var(--gutter) calc(28px + env(safe-area-inset-bottom));
+    overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y pinch-zoom; -webkit-overflow-scrolling: touch;
+  }
+  .daily-filters { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .daily-filters label { display: grid; gap: 4px; min-width: 0; }
+  .daily-filters .caption { font-size: 12px; line-height: 16px; color: var(--color-slate); }
+  .daily-filters select {
+    width: 100%; min-width: 0; min-height: 44px; font: inherit; font-size: 16px; padding: 6px 10px;
+    border: 1px solid var(--color-steel); border-radius: 10px; background: var(--color-gallery-white); color: var(--color-ink);
+  }
+  .daily-alerts { max-width: none; margin: 0; }
+  .daily-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+  .daily-summary strong { font-family: var(--font-display); font-size: 28px; font-weight: 600; line-height: 1.1; }
+  .daily-sub, .daily-footer { margin: 0; font-size: 13px; line-height: 1.5; color: var(--color-slate); }
+  .daily-group { min-width: 0; padding: 14px 16px 4px; border: 1px solid var(--color-hairline-silver); border-radius: 16px; background: #fff; }
+  .daily-machine { margin: 0 0 6px; font-family: var(--font-display); font-size: 18px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+  .daily-group-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+  .daily-badge { display: inline-block; padding: 3px 10px; border-radius: 9999px; font-size: 13px; line-height: 18px; background: var(--color-control-gray); color: var(--color-ink); }
+  .daily-badge-learned { background: #e8f1fd; color: var(--color-apple-blue); font-weight: 600; }
+  .daily-count { font-size: 13px; color: var(--color-slate); }
+  .daily-racks { list-style: none; margin: 10px 0 2px; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+  .daily-racks li { display: grid; min-width: 76px; max-width: 100%; padding: 6px 10px; border-radius: 10px; background: #f2f2f4; }
+  .daily-rack { font-family: var(--font-display); font-size: 28px; font-weight: 600; line-height: 1.15; letter-spacing: -0.5px; }
+  .daily-unit { margin-left: 3px; font-size: 13px; font-weight: 400; letter-spacing: 0; color: var(--color-slate); }
+  .daily-rack-machine { font-size: 12px; line-height: 1.35; color: var(--color-slate); overflow-wrap: anywhere; }
+  .daily-more { margin-top: 2px; }
+  .daily-more p { margin: 4px 0 8px; font-size: 14px; line-height: 1.55; color: var(--color-slate); }
+  @media (max-width: 420px) {
+    .daily-filters { grid-template-columns: 1fr; }
+    .daily-sheet .sheet-head, .daily-sheet .daily-content { padding-inline: 16px; }
+  }
   .hero .month-stats { grid-template-columns:repeat(auto-fit,minmax(min(100%, 16rem),1fr)); }
   .month-stat { overflow-wrap:anywhere; }
   .stat-value { white-space:normal; overflow-wrap:anywhere; font-size:clamp(26px, 5.6vw,32px); }
@@ -443,6 +487,6 @@
   <p>差枚＝その日の総差枚（差枚がわかった台の合計）。メルヘンはグラフと最大持玉から計算した推定値を含みます（※は要確認）。P-STATIONは元グラフの差枚のほか、サイトセブンのグラフ画像やアナスロの情報からの推定値を含む場合があります。推定の計算方法は台・日付の詳細で確認できます。</p>
   <p>＊＝前日までに入力した記録がないイベント（当日以降の入力・時刻不明）。強かった機種＝1台あたりの平均回転数（2台以上ある機種）。</p>
 </footer>
-<script type="module" src="./app.mjs?v=32519bd6c370"></script>
+<script type="module" src="./app.mjs?v=386ade7eb470"></script>
 </body>
 </html>
