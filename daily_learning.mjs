@@ -1,6 +1,6 @@
 // 日次学習・採用中の候補（共有カレンダー）。PCが固定保存した候補をそのまま並べる。画面側で再学習・再計算しない。
 // 2026-11-12：PC・Android・iPhone閲覧ページと同じ順にそろえた（切り替え → 重要な注意 → 候補数 → 機種ごとの候補 → 開閉式の説明）。
-import {displayMachineName} from './data.mjs?v=23de423576cc';
+import {displayMachineName} from './data.mjs?v=6d3093da15c8';
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export const DAILY_STORE_NAMES={nagamachiminami:'長町南',saiwaichou:'幸町','pscube:c740601:20':'P-STATION'};
 const WEEK='日月火水木金土';
