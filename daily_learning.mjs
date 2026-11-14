@@ -1,9 +1,24 @@
 // 日次学習・採用中の候補（共有カレンダー）。PCが固定保存した候補をそのまま並べる。画面側で再学習・再計算しない。
 // 2026-11-12：PC・Android・iPhone閲覧ページと同じ順にそろえた（切り替え → 重要な注意 → 候補数 → 機種ごとの候補 → 開閉式の説明）。
-import {displayMachineName} from './data.mjs?v=6d3093da15c8';
+import {displayMachineName} from './data.mjs?v=c8cc83ca5844';
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export const DAILY_STORE_NAMES={nagamachiminami:'長町南',saiwaichou:'幸町','pscube:c740601:20':'P-STATION'};
 const WEEK='日月火水木金土';
+// 台番号を押したときに開く、サイトのその台の対象日のページ（2026-11-14 利用者「各台番号をタップした際に当日のデータへ飛ぶように」）。
+// 押したときだけ開く（先読みしない）。サイトの確認画面は利用者が押す。知らない店舗・不正な台番号はリンクにしない。
+// メルヘン：台のグラフ（取り込みと同じ standgraph?rack_no=&target_date=）。
+// P’s CUBE：台別ページ。#以降は履歴の日付（取り込みの detail_url と同じ形）。対象日が今日以降なら#を付けず「本日」を開く。
+const MERUHEN='https://meruhenworld.pt.teramoba2.com/';
+const PSCUBE_ROOTS={'pscube:c740601:20':'https://www.pscube.jp/dedamajyoho-P-townDMMpachi/c740601/'};
+export function dailyRackUrl(store, rack, day, now=Date.now()) {
+  const n=Number(rack);
+  if(!Number.isInteger(n)||n<1||!/^\d{4}-\d{2}-\d{2}$/.test(String(day))) return null;
+  if(store==='nagamachiminami'||store==='saiwaichou') return `${MERUHEN}${store}/standgraph/?rack_no=${n}&target_date=${day}`;
+  const root=PSCUBE_ROOTS[store];
+  if(!root) return null;
+  const today=new Date(now+9*3600000).toISOString().slice(0,10);
+  return `${root}cgi-bin/nc-v06-001.php?cd_dai=${n}${day<today?'#'+day.replaceAll('-',''):''}`;
+}
 // 最初に開く対象日の保存時間帯（その前日の23:30から）に入ってから、PCの処理結果が1回も届いていないか。
 // 2026-11-12：以前は「最終処理の日付が今日でない」で見ていたので、前の晩の23:30台に保存した正しい候補にも、
 // 0時を過ぎると「本日の処理結果は届いていません」と出ていた。
@@ -77,7 +92,11 @@ export function dailyPanel(doc, store, target, now=Date.now(), stores=Object.key
   const cards=v.groups.map(g=>`<section class="daily-group">
       <h3 class="daily-machine">${esc(displayMachineName(g.name))}</h3>
       <div class="daily-group-head"><span class="daily-badge${g.learned?' daily-badge-learned':''}">採用中 ${g.learned?'日次学習版':'従来方式'}</span><span class="daily-count num">${g.racks.length}台</span></div>
-      <ul class="daily-racks" aria-label="保存済み候補の台番号">${g.racks.map(r=>`<li><span class="daily-rack num">${esc(r.rack)}<span class="daily-unit">番</span></span>${r.machine?`<span class="daily-rack-machine">${esc(displayMachineName(r.machine))}</span>`:''}</li>`).join('')}</ul>
+      <ul class="daily-racks" aria-label="保存済み候補の台番号">${g.racks.map(r=>{
+        const body=`<span class="daily-rack num">${esc(r.rack)}<span class="daily-unit">番</span></span>${r.machine?`<span class="daily-rack-machine">${esc(displayMachineName(r.machine))}</span>`:''}`;
+        const url=dailyRackUrl(store,r.rack,target,now);
+        return `<li${url?' class="daily-rack-linked"':''}>${url?`<a class="daily-rack-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(r.rack)}番の${esc(dailyDateLabel(target))}のデータをサイトで開く">${body}</a>`:body}</li>`;
+      }).join('')}</ul>
       <details class="more daily-more"><summary>採用方式の説明・保存時刻</summary>
         <p>${esc(g.status)}</p><p>${esc(METHOD_TEXT[g.learned?'learned':'current'])}</p><p>保存 ${esc(dailyTime(g.saved))}（日本時間）</p></details>
     </section>`).join('');
