@@ -116,14 +116,8 @@ export function netCaptureLabel(record) {
     network:'差枚の通信失敗',not_ready:'サイトの通信準備前'})[reason] || '未取得（理由未記録）';
 }
 
-export function netHealth(records) {
-  const known = records.filter(r => Number.isSafeInteger(r.net_medals));
-  return {total:records.length,known:known.length,zero:known.filter(r => r.net_medals===0).length,
-    missing:records.filter(r => !Number.isSafeInteger(r.net_medals)).map(r =>
-      ({rack:r.rack,day:r.day,machine:r.machine,reason:netCaptureLabel(r),
-        checked_at:r.net_capture?.checked_at ?? null,replayable:!!(r.net_capture?.probe || r.net_capture?.probe_available) &&
-          Date.parse(r.net_capture.checked_at)>=Date.now()-NET_PROBE_DAYS*86400000 && Date.parse(r.net_capture.checked_at)<=Date.now()+300000}))};
-}
+// netHealth（P’s CUBEの「○台中○台差枚取得済み」）は、共有ページでその表示を 2026-11-15 に消したので外した。
+// database_android/web/capture_health.mjs の同名の関数は、取り込みカード・Googleの同期スクリプトに組み込まれる生成物の元なので残している。
 
 const ndTime = value => typeof value === 'string' && /(?:Z|[+-]\d{2}:\d{2})$/.test(value) && Number.isFinite(Date.parse(value));
 const ndMillis = value => {const n=Date.parse(value || '');return Number.isFinite(n) ? n : -Infinity;};

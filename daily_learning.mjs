@@ -1,6 +1,6 @@
 // 日次学習・採用中の候補（共有カレンダー）。PCが固定保存した候補をそのまま並べる。画面側で再学習・再計算しない。
 // 2026-11-12：PC・Android・iPhone閲覧ページと同じ順にそろえた（切り替え → 重要な注意 → 候補数 → 機種ごとの候補 → 開閉式の説明）。
-import {displayMachineName} from './data.mjs?v=8b0876c9eeef';
+import {displayMachineName} from './data.mjs?v=2797e9aa94de';
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export const DAILY_STORE_NAMES={nagamachiminami:'長町南',saiwaichou:'幸町','pscube:c740601:20':'P-STATION'};
 const WEEK='日月火水木金土';
@@ -12,19 +12,33 @@ const WEEK='日月火水木金土';
 // めんどくさすぎる」。形は利用者の窓の大当り一覧の控えで確かめた：dn は台番号、dtdd は何日前、mdc は機種の番号）。
 // 機種の番号は、その台のいちばん新しいサイトセブンの記録の出典URLから引く（models：台番号→機種の番号）。
 // 何日前は、サイトセブンの取り込みと同じく日本時間3時切り替えの営業日から数える。対象日が今日より先なら0（今日の分）。
-// サイトが見せる7日分（0〜6日前）より古い日、機種の番号が分からない台はリンクにしない。
+// サイトが見せる8日分（0〜7日前）より古い日、機種の番号が分からない台はリンクにしない（8日分は 2026-11-07 に利用者の窓で
+// 10/30〜11/6 を確認。PCの取り込み site777_session.py の recent_business_days(count=8) と同じ。2026-11-15 レビューで7日分から直した）。
 const MERUHEN='https://meruhenworld.pt.teramoba2.com/';
 const SITE777_HALLS={'pscube:c740601:20':'04034001'};
+const SITE777_DAYS=8;
+// サイトセブンの今の営業日（日本時間3時切り替え。PCの business_day と同じ）。
+const site777Today=now=>new Date(now+(9-3)*3600000).toISOString().slice(0,10);
+// 対象日がサイトセブンの何日前の分か。今日より先の日は今日の分（0）。実在しない日・サイトが見せない古い日は null。
+function site777DaysBack(day, now) {
+  const back=Math.max(0,Math.round((Date.parse(site777Today(now))-Date.parse(day))/86400000));
+  return Number.isFinite(back)&&back<SITE777_DAYS?back:null;
+}
 export function dailyRackUrl(store, rack, day, now=Date.now(), models=new Map()) {
   const n=Number(rack);
   if(!Number.isInteger(n)||n<1||!/^\d{4}-\d{2}-\d{2}$/.test(String(day))) return null;
   if(store==='nagamachiminami'||store==='saiwaichou') return `${MERUHEN}${store}/standgraph/?rack_no=${n}&target_date=${day}`;
   const hall=SITE777_HALLS[store], model=models?.get?.(n);
   if(!hall||!/^\d{1,10}$/.test(String(model??''))) return null;
-  const today=new Date(now+(9-3)*3600000).toISOString().slice(0,10);
-  const back=Math.max(0,Math.round((Date.parse(today)-Date.parse(day))/86400000));
-  if(back>6) return null;
+  const back=site777DaysBack(day,now);
+  if(back===null) return null;
   return `https://m.site777.jp/f/D4000.do?pmc=${hall}&mdc=${model}&dtdd=${back}&dn=${n}`;
+}
+/** リンクが開く日（読み上げの文に使う）。サイトセブンは対象日が今日より先なら今日の分を開く。 */
+export function dailyRackLinkDay(store, day, now=Date.now()) {
+  if(!SITE777_HALLS[store]) return day;
+  const today=site777Today(now);
+  return day>today?today:day;
 }
 /** 台番号→機種の番号（サイトセブンの記録の出典URLの mdc）。同じ台は、いちばん新しい日の記録を使う。 */
 export function rackModelCodes(records, store) {
@@ -35,6 +49,15 @@ export function rackModelCodes(records, store) {
     if(!seen||r.day>seen.day) latest.set(r.rack,{day:r.day,code:r.model_code});
   }
   return new Map([...latest].map(([rack,v])=>[rack,v.code]));
+}
+// 同じ記録の配列からは1回だけ作る（日を切り替えて描き直すたびに数万件をたどらない。2026-11-15 レビュー）。
+const modelCodeCache=new WeakMap();
+function cachedModelCodes(records, store) {
+  if(!Array.isArray(records)) return rackModelCodes(records,store);
+  let byStore=modelCodeCache.get(records);
+  if(!byStore) modelCodeCache.set(records,byStore=new Map());
+  if(!byStore.has(store)) byStore.set(store,rackModelCodes(records,store));
+  return byStore.get(store);
 }
 // 最初に開く対象日の保存時間帯（その前日の23:30から）に入ってから、PCの処理結果が1回も届いていないか。
 // 2026-11-12：以前は「最終処理の日付が今日でない」で見ていたので、前の晩の23:30台に保存した正しい候補にも、
@@ -102,7 +125,7 @@ const METHOD_TEXT={
   learned:'日次学習版：店舗ごとの判定で、将来の成績による改善を確認したため採用している方式です。',
   current:'従来方式：これまでの翌日候補と同じ選び方です。日次学習版は、将来の成績で改善を確認するまで採用しません。'};
 export function dailyPanel(doc, store, target, now=Date.now(), stores=Object.keys(DAILY_STORE_NAMES), records=[]) {
-  const models=rackModelCodes(records,store);
+  const models=cachedModelCodes(records,store), linkDay=dailyRackLinkDay(store,target,now);
   const v=dailyView(doc,store,target,now);
   const storeOptions=(stores.includes(store)?stores:[store,...stores]).filter(s=>DAILY_STORE_NAMES[s])
     .map(s=>`<option value="${esc(s)}"${s===store?' selected':''}>${esc(DAILY_STORE_NAMES[s])}</option>`).join('');
@@ -113,7 +136,7 @@ export function dailyPanel(doc, store, target, now=Date.now(), stores=Object.key
       <ul class="daily-racks" aria-label="保存済み候補の台番号">${g.racks.map(r=>{
         const body=`<span class="daily-rack num">${esc(r.rack)}<span class="daily-unit">番</span></span>${r.machine?`<span class="daily-rack-machine">${esc(displayMachineName(r.machine))}</span>`:''}`;
         const url=dailyRackUrl(store,r.rack,target,now,models);
-        return `<li${url?' class="daily-rack-linked"':''}>${url?`<a class="daily-rack-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(r.rack)}番の${esc(dailyDateLabel(target))}のデータをサイトで開く">${body}</a>`:body}</li>`;
+        return `<li${url?' class="daily-rack-linked"':''}>${url?`<a class="daily-rack-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(r.rack)}番の${esc(dailyDateLabel(linkDay))}のデータをサイトで開く">${body}</a>`:body}</li>`;
       }).join('')}</ul>
       <details class="more daily-more"><summary>採用方式の説明・保存時刻</summary>
         <p>${esc(g.status)}</p><p>${esc(METHOD_TEXT[g.learned?'learned':'current'])}</p><p>保存 ${esc(dailyTime(g.saved))}（日本時間）</p></details>
@@ -146,8 +169,11 @@ export async function openDailyLearning({load,store,target,stores,records=()=>[]
   try {
     const doc=await load();
     let current={store,target};
+    // 店ごとの台の記録は、開いている間は変わらないので1回だけ集める（日・店を切り替えるたびに全記録をたどらない。2026-11-15 レビュー）。
+    const recordCache=new Map();
+    const recordsFor=s=>{if(!recordCache.has(s)) recordCache.set(s,records(s));return recordCache.get(s);};
     const render=()=>{
-      content.innerHTML=dailyPanel(doc,current.store,current.target,Date.now(),stores??[store],records(current.store));
+      content.innerHTML=dailyPanel(doc,current.store,current.target,Date.now(),stores??[store],recordsFor(current.store));
       content.querySelector('[data-learning-day]').onchange=e=>{current.target=e.target.value;render();};
       content.querySelector('[data-learning-store]').onchange=e=>{current.store=e.target.value;render();};
     };
