@@ -1,7 +1,7 @@
-import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=0eb496f1f5ca';
-import {updateStatusLines} from './capture_health.mjs?v=0eb496f1f5ca';
-import {openDailyLearning, defaultDailyTarget} from './daily_learning.mjs?v=0eb496f1f5ca';
-import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=0eb496f1f5ca';
+import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=8b0876c9eeef';
+import {updateStatusLines} from './capture_health.mjs?v=8b0876c9eeef';
+import {openDailyLearning, defaultDailyTarget} from './daily_learning.mjs?v=8b0876c9eeef';
+import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=8b0876c9eeef';
 // 閲覧専用の共有ページ（お試し、2026-10-09。EVENT_CALENDAR.md「閲覧専用の共有ページ」）。
 // 読むだけのApps Script（database_android/tool/viewer_drive_script_readonly.gs）からDriveのファイルを読み、
 // イベントカレンダー（各日のイベント・総差枚）と、日付を押したときの差枚TOP50（11位からは折りたたみ）・強かった機種10選、
@@ -9,8 +9,8 @@ import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, histor
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=0eb496f1f5ca';
-import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=0eb496f1f5ca';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=8b0876c9eeef';
+import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=8b0876c9eeef';
 import {
   MERUHEN_STORES, netEstimateNote, exchangeValue, calendarDay, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords, lowGamesNote,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
@@ -24,7 +24,7 @@ import {
   monthDayList, periodWinRate, winRateYears, yearWinRates, loadFailureText,
   characterBirthdayCellLabel, characterBirthdaysOn, parseCharacterBirthdays,
   ALL_RACKS_SORTS, allRacksOrder, nonVarietyRacks, storeDayComment,
-} from './data.mjs?v=0eb496f1f5ca';
+} from './data.mjs?v=8b0876c9eeef';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -47,7 +47,9 @@ document.addEventListener('click',event=>{
   if(event.target.closest('[data-daily-learning]') && state.id) {
     // 店舗の切り替えは、この共有ページで見られる店舗だけ（ほかの店舗の候補は出さない）。
     void openDailyLearning({store:state.store,target:defaultDailyTarget(),stores:state.model?.stores??[state.store],
-      load:()=>getJson(`https://script.google.com/macros/s/${state.id}/exec?file=daily-learning`)});
+      load:()=>getJson(`https://script.google.com/macros/s/${state.id}/exec?file=daily-learning`),
+      // P-STATIONの台番のリンク（サイトセブン）に使う機種の番号を、読み込み済みの台の記録から引く（2026-11-15）。
+      records:s=>[...(state.model?.byDay??new Map())].filter(([key])=>key.startsWith(`${s}|`)).flatMap(([,rows])=>rows)});
   }
 });
 let statsObserver;
@@ -94,7 +96,7 @@ async function getJson(url) {
  */
 async function loadBirthdays() {
   try {
-    const response = await fetch('./character_birthdays.json?v=0eb496f1f5ca', {credentials: 'omit'});
+    const response = await fetch('./character_birthdays.json?v=8b0876c9eeef', {credentials: 'omit'});
     if (!response.ok) return;
     state.birthdays = parseCharacterBirthdays(await response.json());
     if (state.model) render();

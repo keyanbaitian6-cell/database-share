@@ -1,23 +1,40 @@
 // 日次学習・採用中の候補（共有カレンダー）。PCが固定保存した候補をそのまま並べる。画面側で再学習・再計算しない。
 // 2026-11-12：PC・Android・iPhone閲覧ページと同じ順にそろえた（切り替え → 重要な注意 → 候補数 → 機種ごとの候補 → 開閉式の説明）。
-import {displayMachineName} from './data.mjs?v=0eb496f1f5ca';
+import {displayMachineName} from './data.mjs?v=8b0876c9eeef';
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export const DAILY_STORE_NAMES={nagamachiminami:'長町南',saiwaichou:'幸町','pscube:c740601:20':'P-STATION'};
 const WEEK='日月火水木金土';
 // 台番号を押したときに開く、サイトのその台の対象日のページ（2026-11-14 利用者「各台番号をタップした際に当日のデータへ飛ぶように」）。
 // 押したときだけ開く（先読みしない）。サイトの確認画面は利用者が押す。知らない店舗・不正な台番号はリンクにしない。
 // メルヘン：台のグラフ（取り込みと同じ standgraph?rack_no=&target_date=）。
-// P’s CUBE：台別ページ。#以降は履歴の日付（取り込みの detail_url と同じ形）。対象日が今日以降なら#を付けず「本日」を開く。
+// P-STATION：サイトセブンの台の「出玉詳細」（大当り一覧の台番号のリンクと同じ D4000.do?pmc=&mdc=&dtdd=&dn=。2026-11-15
+// 利用者「P-STATIONのリンクはP'SCUBEではなくサイトセブンにしてほしい。PscubeはCookieの問題でアクセス権限与えるのが
+// めんどくさすぎる」。形は利用者の窓の大当り一覧の控えで確かめた：dn は台番号、dtdd は何日前、mdc は機種の番号）。
+// 機種の番号は、その台のいちばん新しいサイトセブンの記録の出典URLから引く（models：台番号→機種の番号）。
+// 何日前は、サイトセブンの取り込みと同じく日本時間3時切り替えの営業日から数える。対象日が今日より先なら0（今日の分）。
+// サイトが見せる7日分（0〜6日前）より古い日、機種の番号が分からない台はリンクにしない。
 const MERUHEN='https://meruhenworld.pt.teramoba2.com/';
-const PSCUBE_ROOTS={'pscube:c740601:20':'https://www.pscube.jp/dedamajyoho-P-townDMMpachi/c740601/'};
-export function dailyRackUrl(store, rack, day, now=Date.now()) {
+const SITE777_HALLS={'pscube:c740601:20':'04034001'};
+export function dailyRackUrl(store, rack, day, now=Date.now(), models=new Map()) {
   const n=Number(rack);
   if(!Number.isInteger(n)||n<1||!/^\d{4}-\d{2}-\d{2}$/.test(String(day))) return null;
   if(store==='nagamachiminami'||store==='saiwaichou') return `${MERUHEN}${store}/standgraph/?rack_no=${n}&target_date=${day}`;
-  const root=PSCUBE_ROOTS[store];
-  if(!root) return null;
-  const today=new Date(now+9*3600000).toISOString().slice(0,10);
-  return `${root}cgi-bin/nc-v06-001.php?cd_dai=${n}${day<today?'#'+day.replaceAll('-',''):''}`;
+  const hall=SITE777_HALLS[store], model=models?.get?.(n);
+  if(!hall||!/^\d{1,10}$/.test(String(model??''))) return null;
+  const today=new Date(now+(9-3)*3600000).toISOString().slice(0,10);
+  const back=Math.max(0,Math.round((Date.parse(today)-Date.parse(day))/86400000));
+  if(back>6) return null;
+  return `https://m.site777.jp/f/D4000.do?pmc=${hall}&mdc=${model}&dtdd=${back}&dn=${n}`;
+}
+/** 台番号→機種の番号（サイトセブンの記録の出典URLの mdc）。同じ台は、いちばん新しい日の記録を使う。 */
+export function rackModelCodes(records, store) {
+  const latest=new Map();
+  for(const r of records??[]) {
+    if(r?.store!==store||!r.model_code||!Number.isInteger(r.rack)) continue;
+    const seen=latest.get(r.rack);
+    if(!seen||r.day>seen.day) latest.set(r.rack,{day:r.day,code:r.model_code});
+  }
+  return new Map([...latest].map(([rack,v])=>[rack,v.code]));
 }
 // 最初に開く対象日の保存時間帯（その前日の23:30から）に入ってから、PCの処理結果が1回も届いていないか。
 // 2026-11-12：以前は「最終処理の日付が今日でない」で見ていたので、前の晩の23:30台に保存した正しい候補にも、
@@ -84,7 +101,8 @@ export function dailyView(doc, store, target, now=Date.now()) {
 const METHOD_TEXT={
   learned:'日次学習版：店舗ごとの判定で、将来の成績による改善を確認したため採用している方式です。',
   current:'従来方式：これまでの翌日候補と同じ選び方です。日次学習版は、将来の成績で改善を確認するまで採用しません。'};
-export function dailyPanel(doc, store, target, now=Date.now(), stores=Object.keys(DAILY_STORE_NAMES)) {
+export function dailyPanel(doc, store, target, now=Date.now(), stores=Object.keys(DAILY_STORE_NAMES), records=[]) {
+  const models=rackModelCodes(records,store);
   const v=dailyView(doc,store,target,now);
   const storeOptions=(stores.includes(store)?stores:[store,...stores]).filter(s=>DAILY_STORE_NAMES[s])
     .map(s=>`<option value="${esc(s)}"${s===store?' selected':''}>${esc(DAILY_STORE_NAMES[s])}</option>`).join('');
@@ -94,7 +112,7 @@ export function dailyPanel(doc, store, target, now=Date.now(), stores=Object.key
       <div class="daily-group-head"><span class="daily-badge${g.learned?' daily-badge-learned':''}">採用中 ${g.learned?'日次学習版':'従来方式'}</span><span class="daily-count num">${g.racks.length}台</span></div>
       <ul class="daily-racks" aria-label="保存済み候補の台番号">${g.racks.map(r=>{
         const body=`<span class="daily-rack num">${esc(r.rack)}<span class="daily-unit">番</span></span>${r.machine?`<span class="daily-rack-machine">${esc(displayMachineName(r.machine))}</span>`:''}`;
-        const url=dailyRackUrl(store,r.rack,target,now);
+        const url=dailyRackUrl(store,r.rack,target,now,models);
         return `<li${url?' class="daily-rack-linked"':''}>${url?`<a class="daily-rack-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(r.rack)}番の${esc(dailyDateLabel(target))}のデータをサイトで開く">${body}</a>`:body}</li>`;
       }).join('')}</ul>
       <details class="more daily-more"><summary>採用方式の説明・保存時刻</summary>
@@ -115,7 +133,7 @@ export function dailyPanel(doc, store, target, now=Date.now(), stores=Object.key
     <p class="daily-footer">毎日学習しても、毎日の改善を保証しません。設定確率・勝率・期待収支を示すものではありません。</p>`;
 }
 
-export async function openDailyLearning({load,store,target,stores}) {
+export async function openDailyLearning({load,store,target,stores,records=()=>[]}) {
   const dialog=document.createElement('dialog');
   dialog.className='daily-sheet';
   dialog.setAttribute('aria-labelledby','daily-title');
@@ -129,7 +147,7 @@ export async function openDailyLearning({load,store,target,stores}) {
     const doc=await load();
     let current={store,target};
     const render=()=>{
-      content.innerHTML=dailyPanel(doc,current.store,current.target,Date.now(),stores??[store]);
+      content.innerHTML=dailyPanel(doc,current.store,current.target,Date.now(),stores??[store],records(current.store));
       content.querySelector('[data-learning-day]').onchange=e=>{current.target=e.target.value;render();};
       content.querySelector('[data-learning-store]').onchange=e=>{current.store=e.target.value;render();};
     };
