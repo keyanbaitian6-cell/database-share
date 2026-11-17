@@ -1,6 +1,10 @@
 // 週イベント履歴は接続先からだけ読む。公開ファイルには機種名・記号一覧を同梱しない。
 const STORE = 'nagamachiminami';
 export const HISTORY_TYPES = ['4台構成', '半列', 'バラエティ'];
+// PCで作れる週表の種類（PC event_history_data.creatable_kinds と同じ。2026-11-17 利用者「PCで作れるように」で
+// 長町南の4台構成を足した。4台構成は設置ちょうど4台の機種）。
+export const FOUR_RACKS = '4台構成';
+export const creatableHistoryTypes = store => store === STORE ? ['バラエティ', FOUR_RACKS] : ['バラエティ'];
 
 // 表示週の最終記録日を基準に5暦日を見る。空欄は日数に含み、前週の評価も参照する。
 export function historyGradeGap(weeks, machine, lastDay) {
@@ -76,10 +80,11 @@ export function parsePrivateHistory(doc, store = STORE) {
   const definitions=[];
   for(const w of doc.weeks??[]) {
     try {
-      if (!w || w.store !== store || w.type !== 'バラエティ' || new Date(day(w.week)).getUTCDay() !== 1 || day(w.lineup_day) < day(w.week) || day(w.lineup_day) > day(w.week) + 6*86400000 || !Array.isArray(w.machines) || (Object.hasOwn(w,'removed') && typeof w.removed !== 'boolean') || (occupied.get(w.week) ?? 'バラエティ') !== 'バラエティ') throw Error();
+      // 同じ週に別の種類の表は作れない（1週に1種類）。
+      if (!w || w.store !== store || !creatableHistoryTypes(store).includes(w.type) || new Date(day(w.week)).getUTCDay() !== 1 || day(w.lineup_day) < day(w.week) || day(w.lineup_day) > day(w.week) + 6*86400000 || !Array.isArray(w.machines) || (Object.hasOwn(w,'removed') && typeof w.removed !== 'boolean') || (occupied.get(w.week) ?? w.type) !== w.type) throw Error();
       stamp(w.updated_at);
       const machines=w.machines.map(m=>machine(m,base.symbols,false));
-      if (!machines.length || machines.some(m=>m.count>maxRacks) || new Set(machines.map(m=>m.name)).size!==machines.length) throw Error();
+      if (!machines.length || machines.some(m=>w.type===FOUR_RACKS?m.count!==4:m.count>maxRacks) || new Set(machines.map(m=>m.name)).size!==machines.length) throw Error();
       definitions.push({...w,machines}); occupied.set(w.week,w.type);
     } catch { rejected++; }
   }
