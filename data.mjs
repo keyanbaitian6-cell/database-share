@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=602f83cea213';
+import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=0eac2b9575cc';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -405,6 +405,56 @@ export function enteredInAdvance(event) {
 export function eventLabel(event) {
   if (!event || event.name == null) return '';
   return event.name + (enteredInAdvance(event) ? '' : '＊');
+}
+
+/** 同じ店・同じイベント名の直近3回。長町南は月曜から日曜までを1回とする。 */
+export function eventComparison(events, byDay, store, day) {
+  const name = events.get(`${store}|${day}`)?.name;
+  if (!name) return {name: '', rounds: [], machines: []};
+  const matchingDays = [...events.values()]
+    .filter(event => event.store === store && event.name === name)
+    .map(event => event.day).sort();
+  const mondayOf = (date) => {
+    const d = new Date(`${date}T00:00:00Z`);
+    return d.setUTCDate(d.getUTCDate() - (d.getUTCDay() + 6) % 7);
+  };
+  const periods = [];
+  for (const eventDay of matchingDays) {
+    const days = periods.at(-1);
+    const previous = days?.at(-1);
+    if (previous && (store === 'nagamachiminami'
+      ? mondayOf(previous) === mondayOf(eventDay)
+      : calendarDays(previous, eventDay) === 2)) days.push(eventDay);
+    else periods.push([eventDay]);
+  }
+  const latest = periods.findIndex(days => days.includes(day));
+  const machines = new Set();
+  const rounds = periods.slice(Math.max(0, latest - 2), latest + 1).reverse().map(days => {
+    const byMachine = new Map();
+    let recordedDays = 0;
+    for (const date of days) {
+      const racks = byDay.get(`${store}|${date}`) ?? [];
+      if (racks.length) recordedDays++;
+      for (const rack of racks) {
+        const machine = displayMachineName(rack.machine);
+        if (!byMachine.has(machine)) {
+          machines.add(machine);
+          byMachine.set(machine, {won: 0, judged: 0, captured: 0, total: 0, estimated: false});
+        }
+        const result = byMachine.get(machine);
+        const won = rackWon(rack);
+        if (won != null) result.judged++;
+        if (won) result.won++;
+        if (rack.net != null) {
+          result.captured++;
+          result.total += rack.net;
+          result.estimated ||= rack.estimated === true;
+        }
+      }
+    }
+    return {from: days[0], to: days.at(-1), days: days.length, recordedDays, byMachine};
+  });
+  return {name, rounds, machines: [...machines].sort((a, b) => a.localeCompare(b, 'ja'))};
 }
 
 export function signed(n) {

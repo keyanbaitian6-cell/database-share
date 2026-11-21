@@ -7,9 +7,9 @@
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#ffffff">
 <title>database カレンダー</title>
-<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=602f83cea213">
-<link rel="icon" type="image/png" sizes="32x32" href="./favicon.png?v=602f83cea213">
-<link rel="manifest" href="./manifest-android.json?v=602f83cea213">
+<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=0eac2b9575cc">
+<link rel="icon" type="image/png" sizes="32x32" href="./favicon.png?v=0eac2b9575cc">
+<link rel="manifest" href="./manifest-android.json?v=0eac2b9575cc">
 <style>
   :root {
     --color-gallery-white: #ffffff;
@@ -272,6 +272,24 @@
   .sheet .store { font-size: 14px; line-height: 1.29; letter-spacing: -0.224px; color: var(--color-slate); margin: 0; }
   .sheet h2 { font-family: var(--font-display); font-size: 40px; font-weight: 600; line-height: 1.1; letter-spacing: 0; margin: 6px 0 8px; }
   .sheet .event-line { margin: 0; }
+  .event-compare-link {
+    max-width: 100%; min-height: 44px; padding: 0; border: 0; background: none;
+    color: var(--color-pricing-blue); font: inherit; font-weight: 600; text-align: start;
+    text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; cursor: pointer;
+  }
+  .event-compare-table {
+    width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 3px;
+    text-align: center; font-size: 13px;
+  }
+  .event-compare-table th, .event-compare-table td { padding: 6px 2px; overflow-wrap: anywhere; }
+  .event-compare-table thead th { background: var(--color-paper-frost); border-radius: 8px; }
+  .event-compare-table tbody th { padding: 12px 4px 2px; text-align: start; }
+  .event-compare-table td {
+    background: var(--color-gallery-white); border: 1px solid var(--color-control-gray);
+    border-radius: 8px; vertical-align: top;
+  }
+  .event-compare-table small, .event-compare-table td span { display: block; }
+  .event-compare-table small { color: var(--color-slate); font-weight: 400; }
   .sheet .birthday-line { margin: 8px 0 0; color: var(--color-birthday); }
   .sheet .birthday-line p { margin: 0; overflow-wrap: anywhere; }
   .sheet .birthday-line .label { font-size: 12px; font-weight: 600; }
@@ -493,6 +511,6 @@
   <p>差枚＝その日の総差枚（差枚がわかった台の合計）。メルヘンはグラフと最大持玉から計算した推定値を含みます（※は要確認）。P-STATIONは元グラフの差枚のほか、サイトセブンのグラフ画像やアナスロの情報からの推定値を含む場合があります。推定の計算方法は台・日付の詳細で確認できます。</p>
   <p>＊＝前日までに入力した記録がないイベント（当日以降の入力・時刻不明）。強かった機種＝1台あたりの平均回転数（2台以上ある機種）。</p>
 </footer>
-<script type="module" src="./app.mjs?v=602f83cea213"></script>
+<script type="module" src="./app.mjs?v=0eac2b9575cc"></script>
 </body>
 </html>

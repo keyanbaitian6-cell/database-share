@@ -1,7 +1,7 @@
-import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=602f83cea213';
-import {updateStatusLines} from './capture_health.mjs?v=602f83cea213';
-import {openDailyLearning, defaultDailyTarget} from './daily_learning.mjs?v=602f83cea213';
-import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=602f83cea213';
+import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=0eac2b9575cc';
+import {updateStatusLines} from './capture_health.mjs?v=0eac2b9575cc';
+import {openDailyLearning, defaultDailyTarget} from './daily_learning.mjs?v=0eac2b9575cc';
+import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=0eac2b9575cc';
 // 閲覧専用の共有ページ（お試し、2026-10-09。EVENT_CALENDAR.md「閲覧専用の共有ページ」）。
 // 読むだけのApps Script（database_android/tool/viewer_drive_script_readonly.gs）からDriveのファイルを読み、
 // イベントカレンダー（各日のイベント・総差枚）と、日付を押したときの差枚TOP50（11位からは折りたたみ）・強かった機種10選、
@@ -9,8 +9,8 @@ import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, histor
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=602f83cea213';
-import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=602f83cea213';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=0eac2b9575cc';
+import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=0eac2b9575cc';
 import {
   MERUHEN_STORES, netEstimateNote, exchangeValue, calendarDay, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords, lowGamesNote,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
@@ -23,8 +23,8 @@ import {
   SAIWAICHOU_GAP_NET, saiwaichouMachineNet, saiwaichouGrade, saiwaichouGapEnd, saiwaichouGap,
   monthDayList, periodWinRate, winRateYears, yearWinRates, loadFailureText,
   characterBirthdayCellLabel, characterBirthdaysOn, parseCharacterBirthdays,
-  ALL_RACKS_SORTS, allRacksOrder, nonVarietyRacks, storeDayComment,
-} from './data.mjs?v=602f83cea213';
+  ALL_RACKS_SORTS, allRacksOrder, nonVarietyRacks, storeDayComment, eventComparison,
+} from './data.mjs?v=0eac2b9575cc';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -96,7 +96,7 @@ async function getJson(url) {
  */
 async function loadBirthdays() {
   try {
-    const response = await fetch('./character_birthdays.json?v=602f83cea213', {credentials: 'omit'});
+    const response = await fetch('./character_birthdays.json?v=0eac2b9575cc', {credentials: 'omit'});
     if (!response.ok) return;
     state.birthdays = parseCharacterBirthdays(await response.json());
     if (state.model) render();
@@ -257,6 +257,7 @@ function render() {
       : net.summary ? `<button type="button" class="${cls}" data-summary-open="${day}" aria-label="${esc(label)}">${inner}</button>`
       // 台もHTMLの集計も無い日でも、誕生日があれば押して全員（名前（作品））を見られる。
       : birthdays.length ? `<button type="button" class="${cls}" data-birthday-open="${day}" aria-label="${esc(label)}">${inner}</button>`
+      : event ? `<button type="button" class="${cls}" data-event-open="${day}" aria-label="${esc(label)}">${inner}</button>`
       : `<div class="${cls}" aria-label="${esc(label)}">${inner}</div>`;
   }).join('');
   app.innerHTML = `
@@ -393,6 +394,48 @@ const shortDate = (day) => `${Number(day.slice(5, 7))}/${Number(day.slice(8))}`;
 /** `2026-10-09` → `10/9（金）`（狭い選択欄用）。 */
 const shortDateWeek = (day) => `${shortDate(day)}（${WEEKDAYS[new Date(`${day}T00:00:00Z`).getUTCDay()]}）`;
 
+function eventLine(day) {
+  const event = eventLabel(state.model.events.get(`${state.store}|${day}`));
+  return `<p class="event-line">${event
+    ? `イベント：<button class="event-compare-link" type="button" data-event-compare aria-label="${esc(event)}の直近3回を比較">${esc(event)} <span aria-hidden="true">›</span></button>`
+    : 'イベントなし'}</p>`;
+}
+
+const eventCompareView = (day) => ({
+  kind: 'eventCompare', report: eventComparison(state.model.events, state.model.byDay, state.store, day), machine: '',
+});
+
+function eventCompareBody({report: {name, rounds, machines}, machine}) {
+  const shown = machine ? [machine] : machines;
+  const period = (round) => {
+    const from = `${round.from.slice(0, 4)}年<br>${shortDate(round.from)}`;
+    if (round.from === round.to) return from;
+    const endYear = round.to.slice(0, 4) === round.from.slice(0, 4) ? '' : `${round.to.slice(0, 4)}年`;
+    return `${from}〜<wbr>${endYear}${shortDate(round.to)}`;
+  };
+  const value = (r) => {
+    if (!r) return '—';
+    const average = r.captured ? Math.round(r.total / r.captured) : null;
+    return `<span class="num">${r.judged ? `プラス ${r.won}/${r.judged}台` : 'プラス —'}</span>
+      <span class="num ${average == null ? 'zero' : tone(average)}">${average == null ? '平均 —' : `平均 ${signed(average)}枚`}</span>
+      ${r.estimated ? '<small>推定含む</small>' : ''}`;
+  };
+  return `
+    <p class="store">${esc(storeLabel(state.store))}</p>
+    <h2 id="sheet-title" class="long">${esc(name)}</h2>
+    <p class="caption">選んだイベントの回を含む直近${rounds.length}回。${state.store === 'nagamachiminami'
+      ? '月曜から日曜までの同じ名前の日を1回にまとめます。'
+      : '同じ名前が続く日は1回にまとめます。'}</p>
+    ${machines.length > 1 ? `<label class="variety-sort">機種 <select data-event-machine>${options(['', ...machines], machine, m => m || '全機種')}</select></label>` : ''}
+    ${machines.length ? '<p class="caption">台数はプラス台数／勝ち負けが分かる台数。平均差枚は差枚が分かる台のみ。複数日は延べ台数です。</p>' : ''}
+    <table class="event-compare-table" aria-label="開催回ごとの機種別結果">
+      <thead><tr>${rounds.map(r => `<th scope="col">${period(r)}<small>台記録 ${r.recordedDays}/${r.days}日</small></th>`).join('')}</tr></thead>
+      ${shown.map(m => `<tbody><tr><th scope="rowgroup" colspan="${rounds.length}">${esc(m)}</th></tr>
+        <tr>${rounds.map(r => `<td>${value(r.byMachine.get(m))}</td>`).join('')}</tr></tbody>`).join('')}
+    </table>
+    ${machines.length ? '' : '<p class="note">比較できる機種別の記録がありません。</p>'}`;
+}
+
 /** 台のその日のデータ（差枚、回転数・BB・RB・各確率、最大持玉／MY）。 */
 function rackView({rack: r}) {
   const stats = [
@@ -493,6 +536,7 @@ function titleOfView(view) {
   if (view.kind === 'suffixList') return `${suffixLabel(view.suffix)}の内訳`;
   if (view.kind === 'year') return '月別・年間の勝率';
   if (view.kind === 'birthday') return 'キャラ誕生日';
+  if (view.kind === 'eventCompare') return 'イベントの結果比較';
   if (view.kind === 'history') return 'イベント履歴';
   return 'その日のまとめ';
 }
@@ -522,7 +566,7 @@ function openSheet({first, body, onRow, onChange, onAction, onSuffix}) {
       </div>`;
   };
   const dateBar = (view) => {
-    if (view.kind === 'history') return '';
+    if (view.kind === 'history' || view.kind === 'eventCompare') return '';
     if (view.kind === 'year') return yearBar(view);
     const days = daysOfView(view), day = dayOfView(view);
     const index = days.indexOf(day);
@@ -563,7 +607,7 @@ function openSheet({first, body, onRow, onChange, onAction, onSuffix}) {
           <span class="head-title">${esc(titleOfView(view))}</span>
           <button type="button" class="pill pill-outline" data-close${hideClose ? ' style="visibility:hidden" tabindex="-1" aria-hidden="true"' : ''}>閉じる</button></div>
         ${dateBar(view)}${rackStepBar(view)}
-      </div>${body(view)}`;
+      </div>${view.kind === 'eventCompare' ? eventCompareBody(view) : body(view)}`;
     if (view.moreOpen) sheet.querySelector('details.more')?.setAttribute('open', '');
     sheet.scrollTop = view.scroll ?? 0;
     (sheet.querySelector('[data-back]') ?? sheet.querySelector('[data-close]')).focus({preventScroll: true});
@@ -602,6 +646,7 @@ function openSheet({first, body, onRow, onChange, onAction, onSuffix}) {
     if (e.target.closest('[data-back]')) return back();
     if(e.target.closest('[data-history-retry]')) { flushHistoryEdits(); return; }
     const view = views[views.length - 1];
+    if (e.target.closest('[data-event-compare]')) return push(eventCompareView(view.day));
     const yearStep = e.target.closest('[data-year-step]');
     if (yearStep) {
       const years = winRateYears(state.model.byDay, state.model.summaries, state.store);
@@ -679,6 +724,13 @@ function openSheet({first, body, onRow, onChange, onAction, onSuffix}) {
     const view = views[views.length - 1];
     if (e.target.matches('[data-sheet-day]')) { changeDay(view, e.target.value); return; }
     if (e.target.matches('[data-sheet-year]')) { view.year = Number(e.target.value); view.scroll = 0; render(); return; }
+    if (e.target.matches('[data-event-machine]')) {
+      view.machine = e.target.value;
+      view.scroll = 0;
+      render();
+      sheet.querySelector('[data-event-machine]')?.focus({preventScroll: true});
+      return;
+    }
     if (!onChange) return;
     if (e.target.matches('[data-history-week]')) sheet.scrollTop = 0;
     onChange(e.target, view);
@@ -820,12 +872,11 @@ function openDay(first) {
     const {top, machines} = daySummary(racks);
     const estimated = racks.some(r => r.estimated);
     const netName = netNameOf(racks);
-    const event = eventLabel(state.model.events.get(`${state.store}|${view.day}`));
     const digit = suffixOf(view);
     return `
       <p class="store">${esc(storeLabel(state.store))}</p>
       <h2 id="sheet-title">${dateLabel(view.day)}</h2>
-      <p class="event-line">${event ? `イベント：${esc(event)}` : 'イベントなし'}</p>
+      ${eventLine(view.day)}
       ${birthdayLines(view.day)}
       ${net.total != null ? `<p class="total"><span class="label">総${netName}</span>
         <span class="value num ${tone(net.total)}">${signed(net.total)}</span>
@@ -1389,11 +1440,10 @@ function openSummary(first) {
     first: {kind: 'summary', day: first},
     body: (view) => {
       const s = state.model.summaries.get(`${state.store}|${view.day}`);
-      const event = eventLabel(state.model.events.get(`${state.store}|${view.day}`));
       return `
       <p class="store">${esc(storeLabel(state.store))}</p>
       <h2 id="sheet-title">${dateLabel(view.day)}</h2>
-      <p class="event-line">${event ? `イベント：${esc(event)}` : 'イベントなし'}</p>
+      ${eventLine(view.day)}
       ${birthdayLines(view.day)}
       <p class="total" data-win-rate><span class="label">勝率</span>
         <span class="value num zero">${winRateText(s.won, s.judged)}</span>
@@ -1410,11 +1460,10 @@ function openBirthdays(first) {
   openSheet({
     first: {kind: 'birthday', day: first},
     body: (view) => {
-      const event = eventLabel(state.model.events.get(`${state.store}|${view.day}`));
       return `
       <p class="store">${esc(storeLabel(state.store))}</p>
       <h2 id="sheet-title">${dateLabel(view.day)}</h2>
-      <p class="event-line">${event ? `イベント：${esc(event)}` : 'イベントなし'}</p>
+      ${eventLine(view.day)}
       ${birthdayLines(view.day)}
       <p class="note">この日は台のデータがありません。</p>`;
     },
@@ -1648,11 +1697,12 @@ function openYear() {
 }
 
 app.addEventListener('click', (e) => {
-  const target = e.target.closest('[data-open], [data-summary-open], [data-birthday-open], [data-store], [data-month], [data-idle-open], [data-variety-open], [data-suffix-open], [data-year-open], [data-event-history-open]');
+  const target = e.target.closest('[data-open], [data-summary-open], [data-birthday-open], [data-event-open], [data-store], [data-month], [data-idle-open], [data-variety-open], [data-suffix-open], [data-year-open], [data-event-history-open]');
   if (!target || !state.model) return;
   if (target.dataset.open) { openDay(target.dataset.open); return; }
   if (target.dataset.summaryOpen) { openSummary(target.dataset.summaryOpen); return; }
   if (target.dataset.birthdayOpen) { openBirthdays(target.dataset.birthdayOpen); return; }
+  if (target.dataset.eventOpen) { openSheet({first: eventCompareView(target.dataset.eventOpen)}); return; }
   if (target.dataset.idleOpen != null) { openIdle(); return; }
   if (target.dataset.varietyOpen != null) { openVariety(); return; }
   if (target.dataset.suffixOpen != null) { openSuffix(); return; }
