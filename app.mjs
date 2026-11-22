@@ -1,7 +1,7 @@
-import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=0eac2b9575cc';
-import {updateStatusLines} from './capture_health.mjs?v=0eac2b9575cc';
-import {openDailyLearning, defaultDailyTarget} from './daily_learning.mjs?v=0eac2b9575cc';
-import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=0eac2b9575cc';
+import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=8f443f7010dd';
+import {updateStatusLines} from './capture_health.mjs?v=8f443f7010dd';
+import {openDailyLearning, defaultDailyTarget} from './daily_learning.mjs?v=8f443f7010dd';
+import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=8f443f7010dd';
 // 閲覧専用の共有ページ（お試し、2026-10-09。EVENT_CALENDAR.md「閲覧専用の共有ページ」）。
 // 読むだけのApps Script（database_android/tool/viewer_drive_script_readonly.gs）からDriveのファイルを読み、
 // イベントカレンダー（各日のイベント・総差枚）と、日付を押したときの差枚TOP50（11位からは折りたたみ）・強かった機種10選、
@@ -9,8 +9,8 @@ import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, histor
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory} from './viewer_parts.mjs?v=0eac2b9575cc';
-import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=0eac2b9575cc';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory, viewerHistoryCovers} from './viewer_parts.mjs?v=8f443f7010dd';
+import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=8f443f7010dd';
 import {
   MERUHEN_STORES, netEstimateNote, exchangeValue, calendarDay, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords, lowGamesNote,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
@@ -24,7 +24,7 @@ import {
   monthDayList, periodWinRate, winRateYears, yearWinRates, loadFailureText,
   characterBirthdayCellLabel, characterBirthdaysOn, parseCharacterBirthdays,
   ALL_RACKS_SORTS, allRacksOrder, nonVarietyRacks, storeDayComment, eventComparison,
-} from './data.mjs?v=0eac2b9575cc';
+} from './data.mjs?v=8f443f7010dd';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -96,7 +96,7 @@ async function getJson(url) {
  */
 async function loadBirthdays() {
   try {
-    const response = await fetch('./character_birthdays.json?v=0eac2b9575cc', {credentials: 'omit'});
+    const response = await fetch('./character_birthdays.json?v=8f443f7010dd', {credentials: 'omit'});
     if (!response.ok) return;
     state.birthdays = parseCharacterBirthdays(await response.json());
     if (state.model) render();
@@ -160,9 +160,16 @@ async function load() {
     sync_status:value.sync_status ?? value.header?.sync_status};
   state.historyNotice = fresh.eventHistory ? '' : '最新の履歴を取得できません。保存済みの履歴があれば表示します。';
   // 旧Googleスクリプトの全件応答も、端末履歴へ初回移行できる。
+  // 日別の部品から組み立てた内容（history）で、その日がすべて端末の日別キャッシュにあるときは、rememberViewerHistory は
+  // 何もしないので呼ばない（2026-11-22、Codexの点検 #10・Gemini H-5。呼ぶと端末の全履歴を一度にまとめて読み、2店分の
+  // 内容と同時にメモリに載っていた）。確かめは1日ずつ読む viewerHistoryCovers（閲覧ページと同じ）。
+  const remember = async (site, doc) => {
+    if (doc.history && Array.isArray(doc.records) && await viewerHistoryCovers(base, site, new Set(doc.records.map(r => r?.day).filter(d => typeof d === 'string')))) return;
+    await rememberViewerHistory(base, site, doc, undefined, !doc.history);
+  };
   try {
-    if (m) await rememberViewerHistory(base, 'meruhen', m, undefined, !m.history);
-    if (p) await rememberViewerHistory(base, 'pscube', p, undefined, !p.history);
+    if (m) await remember('meruhen', m);
+    if (p) await remember('pscube', p);
     await saveOfflineMetadata(state.id, metadata);
   } catch { state.notice = '端末への保存に失敗しました。空き容量とブラウザの保存設定を確認してください。'; }
   state.notice ||= (!m || !p) ? `一部の更新に失敗しました（${why}）。保存済みのデータを併用しています。` : '';
