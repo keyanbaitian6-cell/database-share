@@ -7,9 +7,9 @@
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#ffffff">
 <title>database カレンダー</title>
-<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=bc008072ece8">
-<link rel="icon" type="image/png" sizes="32x32" href="./favicon.png?v=bc008072ece8">
-<link rel="manifest" href="./manifest-android.json?v=bc008072ece8">
+<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=14f74413ed32">
+<link rel="icon" type="image/png" sizes="32x32" href="./favicon.png?v=14f74413ed32">
+<link rel="manifest" href="./manifest-android.json?v=14f74413ed32">
 <style>
   :root {
     --color-gallery-white: #ffffff;
@@ -299,28 +299,119 @@
   .total .sub { font-size: 14px; letter-spacing: -0.224px; color: var(--color-slate); }
   .sheet h3 { font-family: var(--font-display); font-size: 24px; font-weight: 600; line-height: 1.17; margin: 40px 0 2px; }
   .sheet .caption { font-size: 14px; letter-spacing: -0.224px; color: var(--color-slate); margin: 0 0 12px; }
+  /* 機種別データピックアップ：カード枠・1〜3位の順位色・差枚と勝率の強調で見分けやすくする。 */
   .machine-pickups { display: grid; gap: 12px; }
+  .pickup-card {
+    --pickup-accent: #d8e1ec;
+    --pickup-border: #dde5f0;
+    --pickup-head-bg: #f8fafc;
+    --pickup-head-active: #edf2f8;
+    --pickup-badge-bg: #ffffff;
+    --pickup-badge-fg: #475569;
+    --pickup-badge-border: #cbd5e1;
+    border: 1px solid var(--pickup-border);
+    border-left: 4px solid var(--pickup-accent);
+    border-radius: 14px;
+    background: var(--color-gallery-white);
+    box-shadow: 0 1px 2px rgba(29, 29, 31, 0.04);
+    overflow: hidden;
+  }
+  .pickup-card.pickup-rank-1 {
+    --pickup-accent: #d99b18;
+    --pickup-border: #e7c976;
+    --pickup-head-bg: #fff8e5;
+    --pickup-head-active: #ffefbf;
+    --pickup-badge-bg: #f9d56e;
+    --pickup-badge-fg: #5f3400;
+    --pickup-badge-border: #dfa928;
+  }
+  .pickup-card.pickup-rank-2 {
+    --pickup-accent: #64748b;
+    --pickup-border: #b8c5d6;
+    --pickup-head-bg: #eef2f7;
+    --pickup-head-active: #e0e8f2;
+    --pickup-badge-bg: #d5dfec;
+    --pickup-badge-fg: #1e293b;
+    --pickup-badge-border: #9fb0c6;
+  }
+  .pickup-card.pickup-rank-3 {
+    --pickup-accent: #c56f36;
+    --pickup-border: #e1b89d;
+    --pickup-head-bg: #fdf4ed;
+    --pickup-head-active: #f7e4d6;
+    --pickup-badge-bg: #f2ccb0;
+    --pickup-badge-fg: #6b2d0a;
+    --pickup-badge-border: #d89f78;
+  }
   .machine-pickup {
     width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0;
     text-align: center; font-size: 13px;
   }
-  .machine-pickup caption { text-align: start; }
-  .machine-pickup caption small { display: block; margin-bottom: 5px; color: var(--color-slate); font-size: 12px; }
-  .machine-pickup .row-link {
-    display: inline-flex; align-items: baseline; gap: 8px; max-width: 100%; min-height: 44px;
-    padding: 11px 0; border: 0; background: none; font: inherit; font-size: 16px; font-weight: 600;
-    color: var(--color-pricing-blue); text-align: start; cursor: pointer;
+  .machine-pickup caption {
+    padding: 0; text-align: start; background: var(--pickup-head-bg);
+    border-bottom: 1px solid var(--pickup-border);
   }
+  .machine-pickup .row-link {
+    display: flex; align-items: center; gap: 9px; width: 100%; min-height: 44px;
+    padding: 9px 12px; border: 0; background: transparent; font: inherit; font-size: 15px; font-weight: 700;
+    line-height: 1.35; color: var(--color-ink); text-align: start; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .machine-pickup .row-link:hover { background: rgba(0, 113, 227, 0.04); }
+  .machine-pickup .row-link:active { background: var(--pickup-head-active); }
   .machine-pickup .row-link:focus-visible { outline: 2px solid var(--color-pricing-blue); outline-offset: -2px; }
-  .pickup-rank { flex: none; color: var(--color-slate); }
-  .pickup-name { text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; }
-  .machine-pickup th, .machine-pickup td { padding: 7px 2px; overflow-wrap: anywhere; }
-  .machine-pickup th { background: var(--color-paper-frost); font-size: 12px; }
-  .machine-pickup th:last-child { width: 31%; }
-  .machine-pickup th:first-child { border-radius: 8px 0 0 0; }
-  .machine-pickup th:last-child { border-radius: 0 8px 0 0; }
-  .machine-pickup td { background: var(--color-gallery-white); border-bottom: 1px solid var(--color-control-gray); font-weight: 600; }
-  .machine-pickup td span { display: inline-block; }
+  .pickup-rank {
+    flex: none; display: inline-flex; align-items: center; justify-content: center;
+    min-width: 36px; padding: 2px 8px; border-radius: 9999px;
+    border: 1px solid var(--pickup-badge-border);
+    background: var(--pickup-badge-bg); color: var(--pickup-badge-fg);
+    font-size: 12px; font-weight: 700; line-height: 1.35; letter-spacing: 0;
+  }
+  .pickup-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .pickup-chev {
+    flex: none; font-size: 20px; font-weight: 500; line-height: 1; color: var(--color-pricing-blue);
+    margin-left: 2px;
+  }
+  .pickup-notes {
+    display: flex; flex-wrap: wrap; gap: 5px;
+    padding: 0 12px 7px; margin: -4px 0 0;
+    font-size: 11px; line-height: 1.3; color: var(--color-slate);
+  }
+  .pickup-note-tag {
+    display: inline-block; padding: 1px 7px; border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.78); border: 1px solid rgba(29, 29, 31, 0.1);
+    color: #555e6b; font-weight: 500;
+  }
+  .machine-pickup th, .machine-pickup td { padding: 7px 3px; overflow-wrap: anywhere; }
+  .machine-pickup th {
+    background: #f1f5f9; color: #475569; font-size: 11px; font-weight: 600;
+    letter-spacing: -0.1px; border-bottom: 1px solid #e2e8f0;
+  }
+  .machine-pickup th:nth-child(1) { width: 25%; }
+  .machine-pickup th:nth-child(2) { width: 23%; }
+  .machine-pickup th:nth-child(3) { width: 20%; }
+  .machine-pickup th:nth-child(4) { width: 32%; }
+  .machine-pickup th + th, .machine-pickup td + td { border-left: 1px solid #edf1f6; }
+  .machine-pickup td {
+    background: var(--color-gallery-white); padding: 9px 3px;
+    font-size: 14px; font-weight: 700; line-height: 1.3;
+  }
+  .machine-pickup td.pickup-total { font-size: 15px; }
+  .machine-pickup td.pickup-total.plus { background: #eff6ff; color: #005ec4; }
+  .machine-pickup td.pickup-total.minus { background: #fff4ed; color: var(--color-launch-orange); }
+  .machine-pickup td.pickup-total.zero { background: #f8fafc; }
+  .machine-pickup td.pickup-games { font-weight: 600; color: var(--color-ink); }
+  .machine-pickup td.pickup-win-good { color: #17634c; }
+  .machine-pickup td.pickup-win-high { background: #edf8f2; color: #146c43; }
+  .machine-pickup td .pickup-ratio { display: inline-block; font-size: 11px; font-weight: 500; color: #5f6b7a; }
+  @media (max-width: 360px) {
+    .machine-pickup .row-link { padding: 8px 10px; font-size: 14px; gap: 7px; }
+    .pickup-notes { padding: 0 10px 7px; }
+    .machine-pickup th { font-size: 10.5px; }
+    .machine-pickup td { padding: 8px 2px; font-size: 13px; }
+    .machine-pickup td.pickup-total { font-size: 13.5px; }
+    .machine-pickup td .pickup-ratio { font-size: 10.5px; }
+  }
   .list { background: var(--color-studio-mist); border-radius: var(--radius-cards); padding: 6px 20px; list-style: none; margin: 0; }
   .list li { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-top: 1px solid var(--color-control-gray); }
   .list .row {
@@ -533,6 +624,6 @@
   <p>差枚＝その日の総差枚（差枚がわかった台の合計）。メルヘンはグラフと最大持玉から計算した推定値を含みます（※は要確認）。P-STATIONは元グラフの差枚のほか、サイトセブンのグラフ画像やアナスロの情報からの推定値を含む場合があります。推定の計算方法は台・日付の詳細で確認できます。</p>
   <p>＊＝前日までに入力した記録がないイベント（当日以降の入力・時刻不明）。強かった機種＝1台あたりの平均回転数（2台以上ある機種）。</p>
 </footer>
-<script type="module" src="./app.mjs?v=bc008072ece8"></script>
+<script type="module" src="./app.mjs?v=14f74413ed32"></script>
 </body>
 </html>

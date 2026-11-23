@@ -1,7 +1,7 @@
-import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=bc008072ece8';
-import {updateStatusLines} from './capture_health.mjs?v=bc008072ece8';
-import {openDailyLearning, defaultDailyTarget} from './daily_learning.mjs?v=bc008072ece8';
-import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=bc008072ece8';
+import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=14f74413ed32';
+import {updateStatusLines} from './capture_health.mjs?v=14f74413ed32';
+import {openDailyLearning, defaultDailyTarget} from './daily_learning.mjs?v=14f74413ed32';
+import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=14f74413ed32';
 // 閲覧専用の共有ページ（お試し、2026-10-09。EVENT_CALENDAR.md「閲覧専用の共有ページ」）。
 // 読むだけのApps Script（database_android/tool/viewer_drive_script_readonly.gs）からDriveのファイルを読み、
 // イベントカレンダー（各日のイベント・総差枚）と、日付を押したときの差枚TOP50（11位からは折りたたみ）・強かった機種10選、
@@ -9,8 +9,8 @@ import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, histor
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory, viewerHistoryCovers} from './viewer_parts.mjs?v=bc008072ece8';
-import {beginShareRefresh, prepareOffline, readOfflineMetadata, saveOfflineMetadata, shareRefreshHeld} from './offline.mjs?v=bc008072ece8';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory, viewerHistoryCovers} from './viewer_parts.mjs?v=14f74413ed32';
+import {beginShareRefresh, prepareOffline, readOfflineMetadata, saveOfflineMetadata, shareRefreshHeld} from './offline.mjs?v=14f74413ed32';
 import {
   MERUHEN_STORES, netEstimateNote, exchangeValue, calendarDay, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords, lowGamesNote,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
@@ -24,7 +24,7 @@ import {
   monthDayList, periodWinRate, winRateYears, yearWinRates, loadFailureText,
   characterBirthdayCellLabel, characterBirthdaysOn, parseCharacterBirthdays,
   ALL_RACKS_SORTS, allRacksOrder, nonVarietyRacks, storeDayComment, eventComparison, machinePickups,
-} from './data.mjs?v=bc008072ece8';
+} from './data.mjs?v=14f74413ed32';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -97,7 +97,7 @@ async function getJson(url) {
  */
 async function loadBirthdays() {
   try {
-    const response = await fetch('./character_birthdays.json?v=bc008072ece8', {credentials: 'omit'});
+    const response = await fetch('./character_birthdays.json?v=14f74413ed32', {credentials: 'omit'});
     if (!response.ok) return;
     state.birthdays = parseCharacterBirthdays(await response.json());
     if (state.model) render();
@@ -881,20 +881,30 @@ function machinePickupSection(racks) {
       ${pickups.length ? `<p class="caption">合計差枚の多い順に最大7機種。機種名を押すと台一覧が見られます。</p>
       <div class="machine-pickups">
         ${pickups.map((x, i) => {
-          const netNote = [x.estimated ? '推定を含む' : '', x.captured < x.racks ? `差枚取得 ${x.captured}/${x.racks}台` : '']
-            .filter(Boolean).join('・');
-          return `<table class="machine-pickup">
-            <caption><button type="button" class="row-link" data-machine="${esc(x.machine)}">
-              <span class="pickup-rank num">${i + 1}位</span><span class="pickup-name">${esc(displayMachineName(x.machine))}</span>
-            </button>${netNote ? `<small>${netNote}</small>` : ''}</caption>
+          const rank = i + 1;
+          const rankClass = rank <= 3 ? ` pickup-rank-${rank}` : '';
+          const winRateClass = x.judged
+            ? (x.won * 100 >= x.judged * 70 ? ' pickup-win-high' : x.won * 2 >= x.judged ? ' pickup-win-good' : '')
+            : ' zero';
+          const netNotes = [x.estimated ? '推定を含む' : '', x.captured < x.racks ? `差枚取得 ${x.captured}/${x.racks}台` : '']
+            .filter(Boolean);
+          return `<div class="pickup-card${rankClass}"><table class="machine-pickup">
+            <caption>
+              <button type="button" class="row-link" data-machine="${esc(x.machine)}">
+                <span class="pickup-rank num">${rank}位</span>
+                <span class="pickup-name">${esc(displayMachineName(x.machine))}</span>
+                <span class="pickup-chev" aria-hidden="true">›</span>
+              </button>
+              ${netNotes.length ? `<small class="pickup-notes">${netNotes.map(n => `<span class="pickup-note-tag">${n}</span>`).join(' ')}</small>` : ''}
+            </caption>
             <thead><tr><th scope="col">機種別差枚</th><th scope="col">平均差枚</th><th scope="col">平均G数</th><th scope="col">勝率</th></tr></thead>
             <tbody><tr>
-              <td class="num ${tone(x.total)}">${signed(x.total)}</td>
-              <td class="num ${tone(x.averageNet)}">${signed(x.averageNet)}</td>
-              <td class="num">${count(x.averageGames)}</td>
-              <td class="num">${x.judged ? `${(100 * x.won / x.judged).toFixed(1)}% <span>(${x.won}/${x.judged})</span>` : '—'}</td>
+              <td class="pickup-total num ${tone(x.total)}">${signed(x.total)}</td>
+              <td class="pickup-avg num ${tone(x.averageNet)}">${signed(x.averageNet)}</td>
+              <td class="pickup-games num">${count(x.averageGames)}</td>
+              <td class="pickup-win num${winRateClass}">${x.judged ? `${(100 * x.won / x.judged).toFixed(1)}% <span class="pickup-ratio">(${x.won}/${x.judged})</span>` : '—'}</td>
             </tr></tbody>
-          </table>`;
+          </table></div>`;
         }).join('')}
       </div>` : '<p class="note">この日は差枚がわかる機種がありません。</p>'}
     </section>`;
