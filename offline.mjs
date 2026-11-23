@@ -14,6 +14,32 @@ async function state(id, value) {
 }
 export const readOfflineMetadata = id => state(id);
 export const saveOfflineMetadata = (id, value) => state(id, value);
+
+const refreshKey = id => `database-share-refresh:${id}`;
+const REFRESH_HOLD_MS = 6 * 60 * 60 * 1000;
+
+// 更新を完了したページだけが自分の印を消す。別タブから始めた更新の印は残す。
+export function beginShareRefresh(id) {
+  const key = refreshKey(id);
+  const mark = JSON.stringify({started: Date.now(), token: Math.random()});
+  try { localStorage.setItem(key, mark); }
+  catch { /* 保存できなくても更新は続ける。 */ }
+  return () => {
+    try { if (localStorage.getItem(key) === mark) localStorage.removeItem(key); }
+    catch { /* 保存できなくても表示は続ける。 */ }
+  };
+}
+
+export function shareRefreshHeld(id) {
+  try {
+    const {started} = JSON.parse(localStorage.getItem(refreshKey(id)) ?? '{}') ?? {};
+    if (!Number.isFinite(started)) return false;
+    const elapsed = Date.now() - started;
+    // 閲覧ページと同じく開始時刻から6時間。時計が大きく戻っていたら止め続けない。
+    return elapsed < REFRESH_HOLD_MS && elapsed > -REFRESH_HOLD_MS;
+  } catch { return false; }
+}
+
 export async function prepareOffline() {
   if (!('serviceWorker' in navigator)) return false;
   const registration = await navigator.serviceWorker.register('./sw.js', {scope: './', updateViaCache: 'none'});

@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=083f58484688';
+import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=2c95049f173b';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -545,6 +545,17 @@ export function storeDays(byDay, store) {
   return [...byDay.keys()].filter(k => k.startsWith(prefix)).map(k => k.slice(prefix.length)).sort().reverse();
 }
 
+// 更新すると日別の配列も作り直す。同じ配列では索引を再利用し、印の変更は行の参照に反映される。
+const idleDayIndexes = new WeakMap();
+function idleDayIndex(rows) {
+  let index = idleDayIndexes.get(rows);
+  if (!index) {
+    index = new Map(rows.map(r => [`${r.machine}|${r.rack}`, r]));
+    idleDayIndexes.set(rows, index);
+  }
+  return index;
+}
+
 /**
  * [store] の [day] にバラエティの台のうち、[day] から前へ、記録のある日がどれも [gamesLimit] G未満のまま
  * [minDays] 日（カレンダーの日数）以上続いている台。期間の長い順（同じなら台番号の順）。
@@ -558,13 +569,13 @@ export function idleVarietyRacks(byDay, store, day, {minDays = IDLE_DEFAULT_DAYS
   const dayRows = byDay.get(`${store}|${day}`);
   const counts = new Map();
   for (const r of dayRows) counts.set(r.machine, (counts.get(r.machine) ?? 0) + 1);
-  const index = new Map(days.map(d => [d, new Map(byDay.get(`${store}|${d}`).map(r => [`${r.machine}|${r.rack}`, r]))]));
   const result = [];
   for (const r of dayRows) {
     if (counts.get(r.machine) > varietyMaxRacksFor(store)) continue;
     const run = [];
+    const key = `${r.machine}|${r.rack}`;
     for (const d of days) {
-      const row = index.get(d).get(`${r.machine}|${r.rack}`);
+      const row = idleDayIndex(byDay.get(`${store}|${d}`)).get(key);
       if (!row || row.games >= gamesLimit) break;
       run.push(row);
     }

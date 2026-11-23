@@ -1,7 +1,7 @@
-import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=083f58484688';
-import {updateStatusLines} from './capture_health.mjs?v=083f58484688';
-import {openDailyLearning, defaultDailyTarget} from './daily_learning.mjs?v=083f58484688';
-import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=083f58484688';
+import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=2c95049f173b';
+import {updateStatusLines} from './capture_health.mjs?v=2c95049f173b';
+import {openDailyLearning, defaultDailyTarget} from './daily_learning.mjs?v=2c95049f173b';
+import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=2c95049f173b';
 // 閲覧専用の共有ページ（お試し、2026-10-09。EVENT_CALENDAR.md「閲覧専用の共有ページ」）。
 // 読むだけのApps Script（database_android/tool/viewer_drive_script_readonly.gs）からDriveのファイルを読み、
 // イベントカレンダー（各日のイベント・総差枚）と、日付を押したときの差枚TOP50（11位からは折りたたみ）・強かった機種10選、
@@ -9,8 +9,8 @@ import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, histor
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory, viewerHistoryCovers} from './viewer_parts.mjs?v=083f58484688';
-import {prepareOffline, readOfflineMetadata, saveOfflineMetadata} from './offline.mjs?v=083f58484688';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory, viewerHistoryCovers} from './viewer_parts.mjs?v=2c95049f173b';
+import {beginShareRefresh, prepareOffline, readOfflineMetadata, saveOfflineMetadata, shareRefreshHeld} from './offline.mjs?v=2c95049f173b';
 import {
   MERUHEN_STORES, netEstimateNote, exchangeValue, calendarDay, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords, lowGamesNote,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
@@ -24,7 +24,7 @@ import {
   monthDayList, periodWinRate, winRateYears, yearWinRates, loadFailureText,
   characterBirthdayCellLabel, characterBirthdaysOn, parseCharacterBirthdays,
   ALL_RACKS_SORTS, allRacksOrder, nonVarietyRacks, storeDayComment, eventComparison,
-} from './data.mjs?v=083f58484688';
+} from './data.mjs?v=2c95049f173b';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -40,6 +40,7 @@ const ALL_RACKS_SORT_KEY = 'database-share-all-racks-sort';
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
 const RETRY_MS = [1500, 4000];
 const TIMEOUT_MS = 30000;
+const REFRESH_HELD_NOTICE = '前回の更新が途中で止まったため、自動更新を止めています。「最新を読む」で試せます。';
 
 const app = document.getElementById('app');
 const reload = document.getElementById('reload');
@@ -96,7 +97,7 @@ async function getJson(url) {
  */
 async function loadBirthdays() {
   try {
-    const response = await fetch('./character_birthdays.json?v=083f58484688', {credentials: 'omit'});
+    const response = await fetch('./character_birthdays.json?v=2c95049f173b', {credentials: 'omit'});
     if (!response.ok) return;
     state.birthdays = parseCharacterBirthdays(await response.json());
     if (state.model) render();
@@ -111,6 +112,7 @@ function birthdayLines(day) {
 }
 
 async function load() {
+  if (state.loading) return;
   const loadingId = state.id;
   state.notice = '';
   if (globalThis.navigator?.onLine === false && state.model) {
@@ -123,7 +125,25 @@ async function load() {
   if (!state.model) {
     app.innerHTML = '<p class="status">Googleドライブから読み込んでいます…<br>最初の読み込みは、1分ほどかかることがあります。</p>';
   }
-  const base = `https://script.google.com/macros/s/${state.id}/exec`;
+  const finish = beginShareRefresh(loadingId);
+  try {
+    await updateDocuments(loadingId);
+  } catch (error) {
+    if (loadingId !== state.id) return;
+    state.notice = `更新を完了できませんでした（${error.message}）。「最新を読む」で試せます。`;
+    if (state.model) render();
+    else app.innerHTML = `<p class="status" role="status">${esc(state.notice)}</p>`;
+  } finally {
+    finish();
+    if (loadingId === state.id) {
+      state.loading = false;
+      reload.disabled = false;
+    }
+  }
+}
+
+async function updateDocuments(loadingId) {
+  const base = `https://script.google.com/macros/s/${loadingId}/exec`;
   const [meruhen, pscube, events, pscubeEvents, rainbow, history] = await Promise.allSettled(
     [state.name ? `?u=${state.name}` : '', '?file=pscube', '?file=events', '?file=pscube-events', '?file=rainbow', '?file=event-history']
       .map((q, i) => i < 2 ? fetchViewerDocument(base + q, i === 0 ? 'meruhen' : 'pscube', getJson) : getJson(base + q)));
@@ -134,14 +154,14 @@ async function load() {
   if (loadingId !== state.id) return;
   state.sources = {meruhen:m ? '最新の読み込みに成功' : '更新失敗・保存済みデータ', pscube:p ? '最新の読み込みに成功' : '更新失敗・保存済みデータ'};
   if (!m && !p) {
-    state.loading = false; reload.disabled = false;
     const reason = [meruhen, pscube].map(r => (r.status === 'rejected' ? r.reason?.message : r.value?.error)).find(Boolean);
     state.auxStatus = {};
     if (state.model) { state.notice = `更新できませんでした（${why}）。保存済みのデータを表示しています。`; render(); }
     else showSetup(`読み込めませんでした。リンクが正しいか、少し待ってからもう一度お試しください。${reason ? `（${reason}）` : ''}`);
     return;
   }
-  const saved = await readOfflineMetadata(state.id).catch(() => ({}));
+  const saved = await readOfflineMetadata(loadingId).catch(() => ({}));
+  if (loadingId !== state.id) return;
   const fresh = {events:doc(events), pscubeEvents:doc(pscubeEvents), rainbow:doc(rainbow), eventHistory:doc(history)};
   for (const key of ['events','pscubeEvents']) if (!Array.isArray(fresh[key]?.events)) fresh[key] = null;
   if (!Array.isArray(fresh.rainbow?.marks)) fresh.rainbow = null;
@@ -170,12 +190,14 @@ async function load() {
   try {
     if (m) await remember('meruhen', m);
     if (p) await remember('pscube', p);
-    await saveOfflineMetadata(state.id, metadata);
-  } catch { state.notice = '端末への保存に失敗しました。空き容量とブラウザの保存設定を確認してください。'; }
-  state.notice ||= (!m || !p) ? `一部の更新に失敗しました（${why}）。保存済みのデータを併用しています。` : '';
+    await saveOfflineMetadata(loadingId, metadata);
+  } catch {
+    if (loadingId === state.id) state.notice = '端末への保存に失敗しました。空き容量とブラウザの保存設定を確認してください。';
+  }
   const localM = m || await readViewerHistory(base, 'meruhen').catch(() => null);
   const localP = p || await readViewerHistory(base, 'pscube').catch(() => null);
-  state.loading = false; reload.disabled = false;
+  if (loadingId !== state.id) return;
+  state.notice ||= (!m || !p) ? `一部の更新に失敗しました（${why}）。保存済みのデータを併用しています。` : '';
   showDocuments(localM, localP, metadata);
   flushHistoryEdits();
 }
@@ -1403,13 +1425,14 @@ function rememberName(fromLink) {
 }
 
 async function connect(id) {
+  if (state.id === id && reload.disabled) return;
   if (state.id !== id) {
     state.model = null; state.eventHistory=null; state.historyDocument=null; state.historySaveNotice='';state.recommendationNotice='';
     document.querySelectorAll('.sheet-backdrop [data-close]').forEach(e=>e.click());
     state.historyRedraw=null;
     app.innerHTML='<p class="status">保存した記録を読み込んでいます…</p>';
   }
-  state.loading = false; reload.disabled = false;
+  state.loading = false; reload.disabled = true;
   state.auxStatus = {};
   state.id = id;
   state.sources = {meruhen:'保存済みデータを表示', pscube:'保存済みデータを表示'};
@@ -1420,18 +1443,27 @@ async function connect(id) {
     const results = await Promise.allSettled([readViewerHistory(base, 'meruhen'), readViewerHistory(base, 'pscube'), readOfflineMetadata(id)]);
     const [m, p, metadata] = results.map(r => r.status === 'fulfilled' ? r.value : null);
     if (state.id !== id) return;
+    const held = shareRefreshHeld(id);
     if (m || p) {
       state.notice = results.some(r => r.status === 'rejected')
         ? '一部の保存データを開けませんでした。「最新を読む」で復元してください。'
         : '端末に保存したデータを表示しています。更新するには「最新を読む」を押してください。';
+      if (held) state.notice += ` ${REFRESH_HELD_NOTICE}`;
       showDocuments(m, p, metadata || {});
       flushHistoryEdits();
+      reload.disabled = false;
+      return;
+    }
+    if (held) {
+      app.innerHTML = `<p class="status" role="status">${esc(REFRESH_HELD_NOTICE)}</p>`;
+      reload.disabled = false;
       return;
     }
     if (results.some(r => r.status === 'rejected')) throw new Error('保存した履歴を開けませんでした。');
   } catch {
     if (state.id !== id) return;
     app.innerHTML = '<p class="status">保存したデータを開けませんでした。オンラインで右上の「最新を読む」を押してください。保存データは消していません。</p>';
+    reload.disabled = false;
     return;
   }
   if (state.id === id) load();
@@ -1480,6 +1512,7 @@ function openBirthdays(first) {
 
 // 4機種の構成はPCの定義を使い、顔文字の未送信分だけを接続先ごとに端末保存する。
 const recommendationSending=new Set();
+const recommendationRowsCache=new WeakMap();
 function validRecommendationResult(raw) {try {recommendationResult(raw);return true;}catch{return false;}}
 function localRecommendationResults(id=state.id) {
   const text=store.get(`database-share-recommendation-results:${id}`);
@@ -1498,13 +1531,22 @@ function recommendationView(view) {
   const resultIndex=new Map();
   for(const raw of results)try{const r=recommendationResult(raw);resultIndex.set(recommendationResultKey(r),r);}catch{/* 不正な原文は保存先に残す。 */}
   const pending=cached.filter(r=>r?.pending===true&&validRecommendationResult(r));
-  const records=[...state.model.byDay.values()].flat();view.recRows=[];
+  const byDay=state.model.byDay, machineKey=JSON.stringify(current.machines);
+  let recData=recommendationRowsCache.get(byDay);
+  // 表示中の週だけを展開する。顔文字の変更や保存で描き直すときは同じ行を使う。
+  if(recData?.week!==current.week||recData.machineKey!==machineKey) {
+    const records=days.flatMap(day=>byDay.get(`nagamachiminami|${day}`)??[]);
+    recData={week:current.week,machineKey,
+      rows:current.machines.map(machine=>recommendationRows(records,current.week,machine))};
+    recommendationRowsCache.set(byDay,recData);
+  }
+  view.recRows=[];
   return `<div class="history-navigation"><label>対象週 <select data-recommendation-week aria-label="4大オススメの対象週">${plans.map(p=>`<option value="${p.week}"${p===current?' selected':''}>${p.week}〜${recommendationDays(p.week)[6]}</option>`).join('')}</select></label></div>
     <p class="note">機種構成・週の追加はPCで行います。顔文字はここで選んで保存できます。</p>
     <p class="note" role="status" data-recommendation-status>${esc(state.recommendationNotice||(pending.length?'顔文字は端末に保存済み、共有への送信待ちです。':state.historyDocument?.recommendation_results_editing?'顔文字を選ぶと共有へ保存します。':'顔文字は端末に保存できます。共有するには閲覧・共有用Apps Scriptの更新が必要です。'))}</p>
     ${pending.length?'<button type="button" class="pill pill-outline" data-recommendation-retry>未送信の顔文字を再送</button>':''}
     ${current.machines.map((machine,slot)=>{
-      const rows=recommendationRows(records,view.recWeek,machine);
+      const rows=recData.rows[slot];
       return `<section class="history-week recommendation-card"><h3>${esc(displayMachineName(machine))}</h3>
       <div class="history-overflow"><table class="recommendation-table"><thead><tr><th>台番号</th>${days.map((d,i)=>`<th>${'月火水木金土日'[i]}<small>${d.slice(5)}</small></th>`).join('')}</tr></thead><tbody>${rows.map(row=>`<tr><th scope="row">${row.rack}番</th>${row.cells.map((r,i)=>{
         const at=view.recRows.length;if(r)view.recRows.push(r);
