@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail, meruhenNetHidden} from './net.mjs?v=2c95049f173b';
+import {meruhenNetDetail, meruhenNetHidden, roundHalfAway} from './net.mjs?v=22a72c966658';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -357,21 +357,39 @@ export function winRateYears(byDay, summaries, store) {
 /** 台番の末尾（0〜9）。差枚の一覧で選んだ末尾の台に印を付ける（2026-11-05）。 */
 export const rackSuffix = (rack) => Math.abs(Math.trunc(rack)) % 10;
 
-/** その日の差枚TOP50（差枚の多い順）と強かった機種10選（1台あたりの平均回転数、2台以上の機種）。 */
-export function daySummary(racks) {
-  const top = racks.filter(r => r.net != null).sort((a, b) =>
-    b.net - a.net || b.games - a.games || a.rack - b.rack).slice(0, TOP_RACKS);
+function groupByMachine(racks) {
   const byMachine = new Map();
   for (const r of racks) {
     if (!byMachine.has(r.machine)) byMachine.set(r.machine, []);
     byMachine.get(r.machine).push(r);
   }
-  const machines = [...byMachine].filter(([, list]) => list.length >= STRONG_MACHINE_MIN_RACKS)
-    .map(([machine, list]) => ({machine, racks: list.length,
-      average: Math.round(list.reduce((s, r) => s + r.games, 0) / list.length)}))
+  return byMachine;
+}
+
+const averageGames = racks => Math.round(racks.reduce((sum, r) => sum + r.games, 0) / racks.length);
+
+/** その日の差枚TOP50（差枚の多い順）と強かった機種10選（1台あたりの平均回転数、2台以上の機種）。 */
+export function daySummary(racks) {
+  const top = racks.filter(r => r.net != null).sort((a, b) =>
+    b.net - a.net || b.games - a.games || a.rack - b.rack).slice(0, TOP_RACKS);
+  const machines = [...groupByMachine(racks)].filter(([, list]) => list.length >= STRONG_MACHINE_MIN_RACKS)
+    .map(([machine, list]) => ({machine, racks: list.length, average: averageGames(list)}))
     .sort((a, b) => b.average - a.average || b.racks - a.racks || (a.machine < b.machine ? -1 : a.machine > b.machine ? 1 : 0))
     .slice(0, TOP_MACHINES);
   return {top, machines};
+}
+
+/** 機種別の合計差枚上位7件。平均差枚は差枚を取得できた台、平均G数はその機種の記録がある全台で計算する。 */
+export function machinePickups(racks) {
+  const pickups = [];
+  for (const [machine, list] of groupByMachine(racks)) {
+    const {total, captured, judged, won} = dayNet(list);
+    if (total == null) continue;
+    pickups.push({machine, total, captured, racks: list.length, judged, won,
+      averageNet: roundHalfAway(total / captured), averageGames: averageGames(list),
+      estimated: list.some(r => r.net != null && r.estimated)});
+  }
+  return pickups.sort((a, b) => b.total - a.total || a.machine.localeCompare(b.machine, 'ja')).slice(0, 7);
 }
 
 const TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})$/;

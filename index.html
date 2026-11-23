@@ -7,9 +7,9 @@
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#ffffff">
 <title>database カレンダー</title>
-<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=2c95049f173b">
-<link rel="icon" type="image/png" sizes="32x32" href="./favicon.png?v=2c95049f173b">
-<link rel="manifest" href="./manifest.json?v=2c95049f173b">
+<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=22a72c966658">
+<link rel="icon" type="image/png" sizes="32x32" href="./favicon.png?v=22a72c966658">
+<link rel="manifest" href="./manifest.json?v=22a72c966658">
 <style>
   :root {
     --color-gallery-white: #ffffff;
@@ -299,6 +299,28 @@
   .total .sub { font-size: 14px; letter-spacing: -0.224px; color: var(--color-slate); }
   .sheet h3 { font-family: var(--font-display); font-size: 24px; font-weight: 600; line-height: 1.17; margin: 40px 0 2px; }
   .sheet .caption { font-size: 14px; letter-spacing: -0.224px; color: var(--color-slate); margin: 0 0 12px; }
+  .machine-pickups { display: grid; gap: 12px; }
+  .machine-pickup {
+    width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0;
+    text-align: center; font-size: 13px;
+  }
+  .machine-pickup caption { text-align: start; }
+  .machine-pickup caption small { display: block; margin-bottom: 5px; color: var(--color-slate); font-size: 12px; }
+  .machine-pickup .row-link {
+    display: inline-flex; align-items: baseline; gap: 8px; max-width: 100%; min-height: 44px;
+    padding: 11px 0; border: 0; background: none; font: inherit; font-size: 16px; font-weight: 600;
+    color: var(--color-pricing-blue); text-align: start; cursor: pointer;
+  }
+  .machine-pickup .row-link:focus-visible { outline: 2px solid var(--color-pricing-blue); outline-offset: -2px; }
+  .pickup-rank { flex: none; color: var(--color-slate); }
+  .pickup-name { text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; }
+  .machine-pickup th, .machine-pickup td { padding: 7px 2px; overflow-wrap: anywhere; }
+  .machine-pickup th { background: var(--color-paper-frost); font-size: 12px; }
+  .machine-pickup th:last-child { width: 31%; }
+  .machine-pickup th:first-child { border-radius: 8px 0 0 0; }
+  .machine-pickup th:last-child { border-radius: 0 8px 0 0; }
+  .machine-pickup td { background: var(--color-gallery-white); border-bottom: 1px solid var(--color-control-gray); font-weight: 600; }
+  .machine-pickup td span { display: inline-block; }
   .list { background: var(--color-studio-mist); border-radius: var(--radius-cards); padding: 6px 20px; list-style: none; margin: 0; }
   .list li { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-top: 1px solid var(--color-control-gray); }
   .list .row {
@@ -511,6 +533,6 @@
   <p>差枚＝その日の総差枚（差枚がわかった台の合計）。メルヘンはグラフと最大持玉から計算した推定値を含みます（※は要確認）。P-STATIONは元グラフの差枚のほか、サイトセブンのグラフ画像やアナスロの情報からの推定値を含む場合があります。推定の計算方法は台・日付の詳細で確認できます。</p>
   <p>＊＝前日までに入力した記録がないイベント（当日以降の入力・時刻不明）。強かった機種＝1台あたりの平均回転数（2台以上ある機種）。</p>
 </footer>
-<script type="module" src="./app.mjs?v=2c95049f173b"></script>
+<script type="module" src="./app.mjs?v=22a72c966658"></script>
 </body>
 </html>
