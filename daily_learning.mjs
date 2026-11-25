@@ -1,6 +1,6 @@
 // 日次学習・採用中の候補（共有カレンダー）。PCが固定保存した候補をそのまま並べる。画面側で再学習・再計算しない。
 // 2026-11-12：PC・Android・iPhone閲覧ページと同じ順にそろえた（切り替え → 重要な注意 → 候補数 → 機種ごとの候補 → 開閉式の説明）。
-import {displayMachineName} from './data.mjs?v=eb7c23be0df7';
+import {displayMachineName} from './data.mjs?v=e0212e8e4ac2';
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export const DAILY_STORE_NAMES={nagamachiminami:'長町南',saiwaichou:'幸町','pscube:c740601:20':'P-STATION'};
 const WEEK='日月火水木金土';
@@ -94,12 +94,11 @@ export function dailyStatusParts(status, store) {
   return {mine,general};
 }
 const IMPORTANT=/処理失敗|取り込み待ち|同期先|書けません|読めません/;
-function checkGroup(g, day, target) {
-  const at=Date.parse(g.saved_at??day.saved_at), saved=new Date(at+9*3600000), minutes=saved.getUTCHours()*60+saved.getUTCMinutes();
-  const savedDay=saved.toISOString().slice(0,10), before=new Date(Date.parse(target+'T00:00:00Z')-86400000).toISOString().slice(0,10);
-  // 保存できるのは対象日の前日23:30〜当日23:30未満（日本時間。2026-11-25に8時締切を完全撤廃）。
-  const inWindow=(savedDay===target&&minutes<1410)||(savedDay===before&&minutes>=1410);
-  if(!Number.isFinite(at)||!inWindow||!['current','learned'].includes(g.active)||!Array.isArray(g.selected)||
+function checkGroup(g, day) {
+  const stamp=g.saved_at??day.saved_at, at=Date.parse(stamp);
+  // 2026-11-25 利用者の決定で閲覧側の保存時間帯チェックを撤廃（対象日の保存時刻はPC側だけで管理し、ここでは日時形式のみ検査）。
+  if(typeof stamp!=='string'||!/(Z|[+-]\d\d:\d\d)$/.test(stamp)||!Number.isFinite(at)||
+     !['current','learned'].includes(g.active)||!Array.isArray(g.selected)||
      g.selected.some(id=>!Array.isArray(id)||id.length!==4)) throw Error('事前予測の確認に失敗しました');
 }
 // 表示する中身（4画面で同じ意味・順序）。保存済みの selected の台と順番をそのまま使う。
@@ -107,7 +106,7 @@ export function dailyView(doc, store, target, now=Date.now()) {
   if(doc?.format!=='daily-learning'||doc.version!==1||!Array.isArray(doc.days)) throw Error('日次学習の形式が不正です');
   const day=doc.days.find(d=>d.target===target);
   const found=(day?.groups??[]).filter(g=>g.store===store);
-  found.forEach(g=>checkGroup(g,day,target));
+  found.forEach(g=>checkGroup(g,day));
   const groups=found.map(g=>({name:g.name,learned:g.active==='learned',status:g.status,saved:g.saved_at??day.saved_at,
     racks:g.selected.map(id=>({rack:id[3],machine:id[2]!==g.name?id[2]:null}))}));
   const {mine,general}=dailyStatusParts(doc.status,store);
