@@ -1,6 +1,6 @@
 // 日次学習・採用中の候補（共有カレンダー）。PCが固定保存した候補をそのまま並べる。画面側で再学習・再計算しない。
 // 2026-11-12：PC・Android・iPhone閲覧ページと同じ順にそろえた（切り替え → 重要な注意 → 候補数 → 機種ごとの候補 → 開閉式の説明）。
-import {displayMachineName} from './data.mjs?v=14f74413ed32';
+import {displayMachineName} from './data.mjs?v=eb7c23be0df7';
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export const DAILY_STORE_NAMES={nagamachiminami:'長町南',saiwaichou:'幸町','pscube:c740601:20':'P-STATION'};
 const WEEK='日月火水木金土';
@@ -93,11 +93,12 @@ export function dailyStatusParts(status, store) {
   }
   return {mine,general};
 }
-const IMPORTANT=/処理失敗|取り込み待ち|締切超過|同期先|書けません|読めません/;
+const IMPORTANT=/処理失敗|取り込み待ち|同期先|書けません|読めません/;
 function checkGroup(g, day, target) {
   const at=Date.parse(g.saved_at??day.saved_at), saved=new Date(at+9*3600000), minutes=saved.getUTCHours()*60+saved.getUTCMinutes();
   const savedDay=saved.toISOString().slice(0,10), before=new Date(Date.parse(target+'T00:00:00Z')-86400000).toISOString().slice(0,10);
-  const inWindow=(savedDay===target&&minutes<480)||(savedDay===before&&minutes>=1410);
+  // 保存できるのは対象日の前日23:30〜当日23:30未満（日本時間。2026-11-25に8時締切を完全撤廃）。
+  const inWindow=(savedDay===target&&minutes<1410)||(savedDay===before&&minutes>=1410);
   if(!Number.isFinite(at)||!inWindow||!['current','learned'].includes(g.active)||!Array.isArray(g.selected)||
      g.selected.some(id=>!Array.isArray(id)||id.length!==4)) throw Error('事前予測の確認に失敗しました');
 }
@@ -113,7 +114,7 @@ export function dailyView(doc, store, target, now=Date.now()) {
   const alerts=[...mine,...general].filter(s=>IMPORTANT.test(s));
   if(dailyStale(doc.updated_at,now)) alerts.push(`${dailyDateLabel(defaultDailyTarget(now))}の分の処理結果は届いていません。古い候補をこの日の予測として使わないでください。`);
   if(target<defaultDailyTarget(now)) alerts.push(`${dailyDateLabel(target)}は過去の対象日です。記録として表示しています。次の営業日の候補として使わないでください。`);
-  if(!groups.length) alerts.push('この日の保存済み候補はありません。データ不足・締切超過・PC停止などを確認してください。');
+  if(!groups.length) alerts.push('この日の保存済み候補はありません。データ不足・取り込み待ち・PC停止などを確認してください。');
   const count=groups.reduce((n,g)=>n+g.racks.length,0);
   const machines=groups.filter(g=>g.name!=='バラエティ').length, variety=groups.some(g=>g.name==='バラエティ');
   const scope=machines&&variety?`${machines}機種とバラエティ`:variety?'バラエティ':`${machines}機種`;
@@ -151,7 +152,7 @@ export function dailyPanel(doc, store, target, now=Date.now(), stores=Object.key
     ${cards}
     <details class="more daily-more"><summary>処理状況・日次学習について</summary>
       ${[...v.mine.map(s=>`${DAILY_STORE_NAMES[store]??store}：${s}`),...v.general].map(s=>`<p>${esc(s)}</p>`).join('')||'<p>処理状況の記録はありません。</p>'}
-      <p>PCで前日23:30〜当日8:00の間に保存した候補を表示します。画面を開いても予測を作り直しません。</p>
+      <p>PCで対象日の前日23:30〜当日23:30に保存した候補を表示します。画面を開いても予測を作り直しません。</p>
       <p>採用は店舗ごとに、保存した予測の将来の成績で判定します。判定までは従来方式を採用します。</p></details>
     <p class="daily-footer">毎日学習しても、毎日の改善を保証しません。設定確率・勝率・期待収支を示すものではありません。</p>`;
 }
