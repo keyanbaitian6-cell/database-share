@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail, meruhenNetHidden, roundHalfAway} from './net.mjs?v=e0212e8e4ac2';
+import {meruhenNetDetail, meruhenNetHidden, roundHalfAway} from './net.mjs?v=cf2777682571';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -392,8 +392,17 @@ export function machinePickups(racks) {
   return pickups.sort((a, b) => b.total - a.total || a.machine.localeCompare(b.machine, 'ja')).slice(0, 7);
 }
 
-const TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})$/;
-const timeOf = (e) => (typeof e.updated_at === 'string' && TIME.test(e.updated_at) ? Date.parse(e.updated_at) : null);
+const TIME = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:?\d{2})$/;
+function parseEventTime(value) {
+  if (typeof value !== 'string') return null;
+  const m = TIME.exec(value);
+  if (!m) return null;
+  const fraction = (m[2] ?? '').slice(0, 6).padEnd(6, '0');
+  const zone = m[3] === 'Z' ? 'Z' : m[3].replace(/^([+-]\d{2}):?(\d{2})$/, '$1:$2');
+  const ms = Date.parse(`${m[1]}.${fraction.slice(0, 3)}${zone}`);
+  return Number.isFinite(ms) ? {ms, us: Number(fraction.slice(3, 6))} : null;
+}
+const compareEventTime = (a, b) => (a.ms !== b.ms ? a.ms - b.ms : a.us - b.us);
 
 /** イベントをまとめる：同じ店・日は入力時刻の新しい方（同じなら後から足した方）、時刻のある方が時刻の無い方に勝つ。 */
 export function mergeEvents(...lists) {
@@ -403,11 +412,14 @@ export function mergeEvents(...lists) {
       if (!raw || !DAY.test(raw.day ?? '') || typeof raw.store !== 'string') continue;
       const store = raw.rate == null ? raw.store : `pscube:${raw.store}:${raw.rate}`;
       const name = typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : null;
-      const event = {store, day: raw.day, name, at: timeOf(raw)};
+      const time = parseEventTime(raw.updated_at);
+      const event = {store, day: raw.day, name, at: time ? time.ms : null, atUs: time ? time.us : 0};
       if (event.name == null && event.at == null) continue;
       const key = `${store}|${raw.day}`;
       const old = merged.get(key);
-      if (!old || (event.at != null && (old.at == null || event.at >= old.at))) merged.set(key, event);
+      if (!old || (time != null && (old.at == null || compareEventTime(time, {ms: old.at, us: old.atUs ?? 0}) >= 0))) {
+        merged.set(key, event);
+      }
     }
   }
   return merged;
@@ -415,9 +427,16 @@ export function mergeEvents(...lists) {
 
 /** その日の03:00（日本時間、2026-10-26に2時から3時へ）より前に入力したか（＊を付けない）。date_events.enteredInAdvance と同じ。 */
 export function enteredInAdvance(event) {
-  if (event.at == null) return false;
+  if (!event) return false;
+  let ms = event.at;
+  if (ms == null && typeof event.updated_at === 'string') {
+    const parsed = parseEventTime(event.updated_at);
+    if (!parsed) return false;
+    ms = parsed.ms;
+  }
+  if (ms == null) return false;
   const [y, m, d] = event.day.split('-').map(Number);
-  return event.at < Date.UTC(y, m - 1, d, 3 - 9);
+  return ms < Date.UTC(y, m - 1, d, 3 - 9);
 }
 
 export function eventLabel(event) {
