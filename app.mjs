@@ -1,7 +1,7 @@
-import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=bff2c49b5eb6';
-import {updateStatusLines} from './capture_health.mjs?v=bff2c49b5eb6';
-import {openDailyLearning, defaultDailyTarget} from './daily_learning.mjs?v=bff2c49b5eb6';
-import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=bff2c49b5eb6';
+import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=cfc0d4cd7e29';
+import {updateStatusLines} from './capture_health.mjs?v=cfc0d4cd7e29';
+import {openDailyLearning, defaultDailyTarget} from './daily_learning.mjs?v=cfc0d4cd7e29';
+import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=cfc0d4cd7e29';
 // 閲覧専用の共有ページ（お試し、2026-10-09。EVENT_CALENDAR.md「閲覧専用の共有ページ」）。
 // 読むだけのApps Script（database_android/tool/viewer_drive_script_readonly.gs）からDriveのファイルを読み、
 // イベントカレンダー（各日のイベント・総差枚）と、日付を押したときの差枚TOP50（11位からは折りたたみ）・強かった機種10選、
@@ -9,8 +9,8 @@ import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, histor
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory, viewerHistoryCovers} from './viewer_parts.mjs?v=bff2c49b5eb6';
-import {beginShareRefresh, prepareOffline, readOfflineMetadata, saveOfflineMetadata, shareRefreshHeld} from './offline.mjs?v=bff2c49b5eb6';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory, viewerHistoryCovers} from './viewer_parts.mjs?v=cfc0d4cd7e29';
+import {beginShareRefresh, prepareOffline, readOfflineMetadata, saveOfflineMetadata, shareRefreshHeld} from './offline.mjs?v=cfc0d4cd7e29';
 import {
   MERUHEN_STORES, netEstimateNote, exchangeValue, calendarDay, dayHeatLevel, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords, lowGamesNote,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
@@ -24,8 +24,8 @@ import {
   monthDayList, periodWinRate, winRateYears, yearWinRates, loadFailureText,
   characterBirthdayCellLabel, characterBirthdaysOn, parseCharacterBirthdays,
   ALL_RACKS_SORTS, allRacksOrder, nonVarietyRacks, storeDayComment, eventComparison, machinePickups,
-  rackRecentHistory, searchStoreEntities, machineDayHistory, rackDayHistory, latestStoreComparison,
-} from './data.mjs?v=bff2c49b5eb6';
+  rackRecentHistory, searchStoreEntities, machineDayHistory, rackDayHistory, latestStoreComparison, sameMachineName,
+} from './data.mjs?v=cfc0d4cd7e29';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -61,7 +61,6 @@ const HISTORY_LOCAL_KEY='database-share-history-edits:';
 const historySending=new Set();
 
 const esc = (s) => String(s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'})[c]);
-const machineKey = (s) => String(s ?? '').replaceAll('+', ' ').replace(/\s+/g, ' ').trim();
 const tone = (n) => (n > 0 ? 'plus' : n < 0 ? 'minus' : 'zero');
 const store = {
   get(key) { try { return localStorage.getItem(key); } catch { return null; } },
@@ -98,7 +97,7 @@ async function getJson(url) {
  */
 async function loadBirthdays() {
   try {
-    const response = await fetch('./character_birthdays.json?v=bff2c49b5eb6', {credentials: 'omit'});
+    const response = await fetch('./character_birthdays.json?v=cfc0d4cd7e29', {credentials: 'omit'});
     if (!response.ok) return;
     state.birthdays = parseCharacterBirthdays(await response.json());
     if (state.model) render();
@@ -259,7 +258,7 @@ function storeComparisonSection(model) {
           const metaParts = x.winRate
             ? [`${x.won}/${x.judged}台`]
             : x.total != null
-              ? [`平均${signed(x.averageNet)}`, x.winRatePct != null ? `${x.winRatePct}%` : ''].filter(Boolean)
+              ? [`平均${signed(x.averageNet)}`, x.winRatePct != null ? `勝率${x.winRatePct}%` : '', x.estimated ? '推定' : ''].filter(Boolean)
               : ['記録なし'];
           const canOpen = x.hasRacks || x.hasSummary;
           const mode = active ? (x.hasRacks ? 'day' : x.hasSummary ? 'summary' : 'none') : 'switch';
@@ -532,18 +531,22 @@ function eventCompareBody({report: {name, rounds, machines}, machine}) {
 function rackTrendSection(r) {
   const history = rackRecentHistory(state.model.byDay, state.model.events, r.store, r.rack, r.day, 7);
   if (!history.length) return '';
-  const withNet = history.filter(h => h.net != null);
-  const totalNet = withNet.length ? withNet.reduce((s, h) => s + h.net, 0) : null;
-  const judged = history.filter(h => h.won != null);
+  const same = history.filter(h => h.sameMachine);
+  const otherCount = history.length - same.length;
+  const sameWithNet = same.filter(h => h.net != null);
+  const totalNet = sameWithNet.length ? sameWithNet.reduce((s, h) => s + h.net, 0) : null;
+  const judged = same.filter(h => h.won != null);
   const won = judged.filter(h => h.won).length;
-  const avgGames = Math.round(history.reduce((s, h) => s + h.games, 0) / history.length);
-  const anyEst = withNet.some(h => h.estimated);
-  const maxAbs = Math.max(1000, ...withNet.map(h => Math.abs(h.net)));
+  const avgGames = same.length ? Math.round(same.reduce((s, h) => s + h.games, 0) / same.length) : 0;
+  const anyEst = sameWithNet.some(h => h.estimated);
+  const allWithNet = history.filter(h => h.net != null);
+  const maxAbs = Math.max(1000, ...allWithNet.map(h => Math.abs(h.net)));
   const summaryParts = [
-    `記録 ${history.length}日`,
+    otherCount ? `同機種 ${same.length}日` : `記録 ${same.length}日`,
     judged.length ? `プラス ${won}/${judged.length}日` : '',
     totalNet != null ? `合計 ${signed(totalNet)}枚${anyEst ? '（推定含む）' : ''}` : '',
-    `平均 ${count(avgGames)}G`,
+    same.length ? `平均 ${count(avgGames)}G` : '',
+    otherCount ? `別機種 ${otherCount}日（集計外）` : '',
   ].filter(Boolean);
   const rows = history.map(h => {
     const current = h.day === r.day;
@@ -633,14 +636,14 @@ function daysOfView(view) {
   const has = (store, d, test) => (byDay.get(`${store}|${d}`) ?? []).some(test);
   if (view.kind === 'rack') {
     const r = view.rack;
-    return storeDays(byDay, r.store).filter(d => has(r.store, d, x => x.machine === r.machine && x.rack === r.rack));
+    return storeDays(byDay, r.store).filter(d => has(r.store, d, x => sameMachineName(x.machine, r.machine) && x.rack === r.rack));
   }
   if (view.kind === 'summary') return summaryDays(state.store);
   if (view.kind === 'birthday') return [view.day];
   const all = storeDays(byDay, state.store);
   if (view.kind === 'historyMachine') return all.filter(d => has(state.store, d, x => x.machine === view.machine));
   if (view.kind === 'searchMachineDay') return all.filter(d => has(state.store, d, x => displayMachineName(x.machine) === displayMachineName(view.machine)));
-  if (view.kind === 'machine') return all.filter(d => has(state.store, d, x => machineKey(x.machine) === machineKey(view.machine)));
+  if (view.kind === 'machine') return all.filter(d => has(state.store, d, x => sameMachineName(x.machine, view.machine)));
   return all;
 }
 
@@ -650,7 +653,7 @@ const dayOfView = (view) => (view.kind === 'rack' ? view.rack.day : view.kind ==
 function setViewDay(view, day) {
   if (view.kind === 'rack') {
     const r = view.rack;
-    view.rack = (state.model.byDay.get(`${r.store}|${day}`) ?? []).find(x => x.machine === r.machine && x.rack === r.rack) ?? r;
+    view.rack = (state.model.byDay.get(`${r.store}|${day}`) ?? []).find(x => sameMachineName(x.machine, r.machine) && x.rack === r.rack) ?? r;
   } else {
     view.day = day;
     view.picked = null;
@@ -671,7 +674,7 @@ function rackNeighbor(view, dir) {
   if (!next || view.index < 0) return null;
   const r = view.rack;
   if (r.day === view.list[view.index].day) return next;
-  return (state.model.byDay.get(`${r.store}|${r.day}`) ?? []).find(x => x.machine === next.machine && x.rack === next.rack) ?? next;
+  return (state.model.byDay.get(`${r.store}|${r.day}`) ?? []).find(x => sameMachineName(x.machine, next.machine) && x.rack === next.rack) ?? next;
 }
 
 /** 上に固定する見出し（下まで送っても、何の画面か分かるように）。 */
@@ -689,7 +692,7 @@ function titleOfView(view) {
   if (view.kind === 'year') return '月別・年間の勝率';
   if (view.kind === 'birthday') return 'キャラ誕生日';
   if (view.kind === 'eventCompare') return 'イベントの結果比較';
-  if (view.kind === 'history') return 'イベント履歴';
+  if (view.kind === 'history') return state.store === 'saiwaichou' ? 'バラエティ履歴' : 'イベント履歴';
   return 'その日のまとめ';
 }
 
@@ -733,7 +736,7 @@ function openSheet({first, body, onRow, onChange, onAction, onSuffix, onInput}) 
     if (view.kind !== 'rack' || !(view.list?.length > 1)) return '';
     const before = rackNeighbor(view, -1), after = rackNeighbor(view, 1);
     // 隣が別の機種なら機種名も添える（イベント履歴は表の下の行の機種へ進むため）。
-    const label = (r) => `${r.rack}番${r.machine !== view.rack.machine ? `・${esc(displayMachineName(r.machine))}` : ''}`;
+    const label = (r) => `${r.rack}番${!sameMachineName(r.machine, view.rack.machine) ? `・${esc(displayMachineName(r.machine))}` : ''}`;
     return `<div class="date-bar">
         <button type="button" class="pill pill-outline rack-step" data-rack-step="-1"${before ? '' : ' disabled'}>‹ 前の台${before ? `（${label(before)}）` : ''}</button>
         <button type="button" class="pill pill-outline rack-step" data-rack-step="1"${after ? '' : ' disabled'}>次の台${after ? `（${label(after)}）` : ''} ›</button>
@@ -1061,7 +1064,7 @@ function openDay(first) {
     main: `<span class="rack num">${r.rack}番${rackMark(r)}${suffixMark(r, digit)}</span><span class="machine" style="display:block">${esc(displayMachineName(r.machine))}</span>`,
     right: `${netCell(r)}<span class="small num">${count(r.games)}G</span>`,
   }));
-  const netNameOf = (racks) => (racks.some(r => r.estimated) ? '推定差枚' : '差枚');
+  const netNameOf = (list) => (list.some(r => r.net != null && r.estimated) ? '推定差枚' : '差枚');
 
   const dayView = (view) => {
     const racks = racksOf(view.day);
@@ -1069,7 +1072,6 @@ function openDay(first) {
     const index = new Map(racks.map((r, i) => [r, i]));
     const net = dayNet(racks);
     const {top, machines} = daySummary(racks);
-    const estimated = racks.some(r => r.estimated);
     const netName = netNameOf(racks);
     const digit = suffixOf(view);
     return `
@@ -1112,8 +1114,8 @@ function openDay(first) {
     const racks = racksOf(view.day);
     view.items = racks;
     const index = new Map(racks.map((r, i) => [r, i]));
-    const netName = netNameOf(racks);
-    const list = racks.filter(r => r.machine === view.machine).sort((a, b) => a.rack - b.rack);
+    const list = racks.filter(r => sameMachineName(r.machine, view.machine)).sort((a, b) => a.rack - b.rack);
+    const netName = netNameOf(list);
     view.rackList = list;
     const nets = list.filter(r => r.net != null);
     const total = nets.length ? nets.reduce((s, r) => s + r.net, 0) : null;
@@ -1140,14 +1142,18 @@ function openDay(first) {
     const racks = racksOf(view.day);
     view.items = racks;
     const index = new Map(racks.map((r, i) => [r, i]));
-    const netName = netNameOf(racks);
     const others = nonVarietyRacks(racks, state.store);
-    const names = [...new Set(others.map(r => r.machine))].sort((a, b) => a.localeCompare(b, 'ja'));
+    const names = [...new Set(others.map(r => r.machine))].sort((a, b) => displayMachineName(a).localeCompare(displayMachineName(b), 'ja'));
     const only = names.includes(view.only) ? view.only : '';
     const list = allRacksOrder(others.filter(r => !only || r.machine === only), view.sort);
+    const netName = netNameOf(list);
     view.rackList = list;
     const nets = list.filter(r => r.net != null);
     const total = nets.length ? nets.reduce((sum, r) => sum + r.net, 0) : null;
+    const varietyScope = rainbowVarietyMax(state.store) === 1 ? '1台だけ' : `1〜${rainbowVarietyMax(state.store)}台`;
+    const varietyCaption = Object.hasOwn(MERUHEN_STORES, state.store)
+      ? `バラエティ（${varietyScope}の機種）はバラエティ${RAINBOW}にあります。`
+      : `バラエティ（${varietyScope}の機種）以外の台です。`;
     return `
       <p class="store">${esc(storeLabel(state.store))}　${dateLabel(view.day)}</p>
       <h2 id="sheet-title">全機種の台一覧</h2>
@@ -1160,7 +1166,7 @@ function openDay(first) {
         ${names.map(name => `<option value="${esc(name)}"${name === only ? ' selected' : ''}>${esc(displayMachineName(name))}</option>`).join('')}</select></label>
       <label class="variety-sort">並べ方 <select data-all-sort aria-label="並べ方">
         ${Object.entries(ALL_RACKS_SORTS).map(([key, label]) => `<option value="${key}"${view.sort === key ? ' selected' : ''}>${label.replace('差枚', netName)}</option>`).join('')}</select></label>
-      <p class="caption">バラエティ（${rainbowVarietyMax(state.store) === 1 ? '1台だけ' : `1〜${rainbowVarietyMax(state.store)}台`}の機種）はバラエティ${RAINBOW}にあります。台を押すと、その台のデータが見られます。</p>
+      <p class="caption">${varietyCaption}台を押すと、その台のデータが見られます。</p>
       ${suffixClear(suffixOf(view))}
       ${list.length ? tapList(list.map(r => ({
         lead: '', attrs: `data-rack="${index.get(r)}"`,
@@ -1466,7 +1472,7 @@ function openVariety() {
         return;
       }
       const x = row.dataset.varietyRack != null ? view.rows[Number(row.dataset.varietyRack)] : null;
-      const shown = view.sort === 'gap' ? byLongestGap(view.rows, view.day) : view.rows;
+      const shown = view.sort === 'gap' ? byLongestGap(view.rows, view.day) : rotationOrder(view.rows, view.sort);
       if (x?.open) push(rackPage(x.open, shown.map(y => y.open).filter(Boolean)));
     },
     onAction: (button, view) => {
@@ -1520,7 +1526,7 @@ function openSuffix() {
     const periodLabel = SUFFIX_PERIODS[view.period][0];
     const endings = zoromeEndingsOf(state.store).map(n => String(n).padStart(2, '0')).join('・');
     const pscube = /^pscube:/.test(state.store);
-    const netName = pscube ? '差枚（サイトの差枚）' : '推定差枚。ジャグラーオンラインの差枚があればそれ';
+    const netName = pscube ? 'サイトの差枚・サイトセブンやアナスロからの推定差枚' : '推定差枚。ジャグラーオンラインの差枚があればそれ';
     const title = view.period === 'day' ? `${dateLabel(view.day)}の末尾順位` : `${periodLabel}（${shortDate(report.start)}〜${shortDate(view.day)}）の末尾順位`;
     return `<h2 id="sheet-title" class="sr-only">末尾別データまとめ</h2>
       <p class="caption">${esc(storeLabel(state.store))}・末尾${suffixesOf(state.store).join('・')}とゾロ目（下2桁が${endings}。末尾の集計にも入る）。順位は平均差枚（${netName}）の高い順です。</p>
@@ -1787,9 +1793,6 @@ function openEventHistory() {
     try { varietyModel=parsePrivateHistory(state.historyDocument.saiwaichou_variety,location); }
     catch(error) { toast(`幸町の履歴を読めません：${error.message}`);return; }
   }
-  if (!state.eventHistory && saiwaichou) {
-    toast(state.historyNotice || '履歴がまだありません。PCで共有へ反映してください。'); return;
-  }
   const index = new Map();
   for (const [key, records] of state.model.byDay) {
     if (key.startsWith(location+'|')) index.set(key.slice(location.length+1), new Set(records.map(r=>r.machine)));
@@ -1842,7 +1845,7 @@ function openEventHistory() {
         const name=historySavedName(item,index.get(d)??new Set());
         const key=encodeURIComponent(JSON.stringify({type:w.type,week:w.from,machine:item.name,day:d}));
         const result=saiwaichou?`<span class="history-symbol ${item.results[i]==='優'?'history-excellent':item.results[i]==='良'?'history-good':'history-empty'}">${esc(item.results[i]||'—')}</span>`:`<select class="history-symbol" data-history-edit="${esc(key)}"${state.historyDocument?.shared_editing?'':' disabled'} aria-label="${esc(d)} ${esc(displayMachineName(item.name))}の結果">${['',...model.symbols].map(s=>`<option value="${esc(s)}"${s===item.results[i]?' selected':''}>${esc(s||'—')}</option>`).join('')}</select>`;
-        return `<td><span class="history-mobile-day" aria-hidden="true">${'月火水木金土日'[i]}<small>${d.slice(8)}</small></span>${result}${name ? `<button type="button" class="row history-cell" data-history-machine="${esc(name)}" data-history-day="${d}" aria-label="${esc(d)} ${esc(name)}のデータを開く"><span class="history-open-label">開く </span>↗</button>` : '<small class="history-no-record"><span class="history-no-record-label">この日の記録なし</span><span class="history-mobile-none" aria-hidden="true">—</span></small>'}</td>`;
+        return `<td><span class="history-mobile-day" aria-hidden="true">${'月火水木金土日'[i]}<small>${d.slice(8)}</small></span>${result}${name ? `<button type="button" class="row history-cell" data-history-machine="${esc(name)}" data-history-day="${d}" aria-label="${esc(d)} ${esc(displayMachineName(name))}のデータを開く"><span class="history-open-label">開く </span>↗</button>` : '<small class="history-no-record"><span class="history-no-record-label">この日の記録なし</span><span class="history-mobile-none" aria-hidden="true">—</span></small>'}</td>`;
       }).join('')}</tr>`).join('');
       return `<section class="history-week"><h3>${esc(w.from)}〜${esc(w.to)}</h3>${w.lineup_day?`<p class="note">分類日：${esc(w.lineup_day)}（作成時の構成で固定）</p>`:''}<div class="history-overflow"><table class="history-table"><thead><tr><th>機種名・台数</th>${days.map(d=>`<th>${esc(shortDateWeek(d))}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div></section>`;
     }).join('')}<p class="note">${saiwaichou?'空欄の日は差枚から自動（2,500枚以上＝優、0〜2,499枚＝良、マイナス・不明は—）。手入力はPCのみで優先。':'記号の意味は未設定です。'}「↗」は、その機種・その日の保存データを表示します。</p>`;
@@ -2077,7 +2080,7 @@ function openSearch() {
     const target = displayMachineName(view.machine);
     const list = racks.filter(r => displayMachineName(r.machine) === target).sort((a, b) => a.rack - b.rack);
     view.rackList = list;
-    const netName = racks.some(r => r.estimated) ? '推定差枚' : '差枚';
+    const netName = list.some(r => r.net != null && r.estimated) ? '推定差枚' : '差枚';
     const nets = list.filter(r => r.net != null);
     const total = nets.length ? nets.reduce((s, r) => s + r.net, 0) : null;
     const average = list.length ? Math.round(list.reduce((s, r) => s + r.games, 0) / list.length) : 0;

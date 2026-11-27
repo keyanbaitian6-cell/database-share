@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail, meruhenNetHidden, roundHalfAway} from './net.mjs?v=bff2c49b5eb6';
+import {meruhenNetDetail, meruhenNetHidden, roundHalfAway} from './net.mjs?v=cfc0d4cd7e29';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -27,6 +27,15 @@ export function isHiddenMachine(store, name) {
 /** 画面に出す機種名：半角カナだけ全角にそろえる（list_views.displayMachineName と同じ）。 */
 export function displayMachineName(name) {
   return String(name ?? '').replace(/[｡-ﾟ]+/g, s => s.normalize('NFKC'));
+}
+
+/** 機種名の同一判定：半角カナ→全角カナ・`+` と連続空白をそろえて比べる（P-STATION の旧P’s CUBE⇔サイトセブン跨ぎなど）。 */
+export function machineIdentity(name) {
+  return displayMachineName(name).replaceAll('+', ' ').replace(/\s+/g, ' ').trim();
+}
+
+export function sameMachineName(a, b) {
+  return a != null && b != null && machineIdentity(a) === machineIdentity(b);
 }
 
 export function storeLabel(store, short = false) {
@@ -777,7 +786,7 @@ export function allRacksOrder(rows, sort) {
   const field = sort.startsWith('games') ? 'games' : sort.startsWith('net') ? 'net' : null;
   const sign = sort.endsWith('-desc') ? -1 : 1;
   const value = x => (field && Number.isFinite(x[field]) ? x[field] : null);
-  return [...rows].sort((a, b) => (sort === 'machine' ? a.machine.localeCompare(b.machine, 'ja')
+  return [...rows].sort((a, b) => (sort === 'machine' ? displayMachineName(a.machine).localeCompare(displayMachineName(b.machine), 'ja')
     : field ? Number(value(a) == null) - Number(value(b) == null) || sign * ((value(a) ?? 0) - (value(b) ?? 0)) : 0)
     || a.rack - b.rack);
 }
@@ -1209,7 +1218,7 @@ export function rackRecentHistory(byDay, events, store, rack, day, limit = 7) {
   return found.map(r => ({
     day: r.day,
     machine: r.machine,
-    sameMachine: r.machine === currentMachine,
+    sameMachine: sameMachineName(r.machine, currentMachine),
     games: r.games,
     bb: r.bb,
     rb: r.rb,
