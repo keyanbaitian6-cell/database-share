@@ -7,9 +7,9 @@
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#ffffff">
 <title>database カレンダー</title>
-<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=cf2777682571">
-<link rel="icon" type="image/png" sizes="32x32" href="./favicon.png?v=cf2777682571">
-<link rel="manifest" href="./manifest-android.json?v=cf2777682571">
+<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=bff2c49b5eb6">
+<link rel="icon" type="image/png" sizes="32x32" href="./favicon.png?v=bff2c49b5eb6">
+<link rel="manifest" href="./manifest-android.json?v=bff2c49b5eb6">
 <style>
   :root {
     --color-gallery-white: #ffffff;
@@ -77,45 +77,51 @@
   .pill:focus-visible, .day:focus-visible, .anchor:focus-visible { outline: 2px solid var(--color-pricing-blue); outline-offset: 2px; }
 
   /* Hero */
-  .hero { text-align: center; padding: 56px var(--gutter) 28px; }
-  .kicker { font-family: var(--font-display); font-size: 21px; font-weight: 600; line-height: 1; letter-spacing: 0.231px; margin: 0 0 14px; }
+  .hero { text-align: center; padding: 18px var(--gutter) 12px; }
+  .kicker { font-family: var(--font-display); font-size: 16px; font-weight: 600; line-height: 1.35; letter-spacing: 0.1px; color: #3a3a3f; margin: 0 0 4px; }
   .headline {
-    font-family: var(--font-display); font-weight: 600; margin: 0;
-    font-size: clamp(44px, 12vw, 80px); line-height: 1.05; letter-spacing: -0.015em;
+    font-family: var(--font-display); font-weight: 700; margin: 0;
+    font-size: clamp(30px, 8.5vw, 48px); line-height: 1.08; letter-spacing: -0.02em;
   }
-  .hero .lede { color: var(--color-slate); margin: 16px auto 0; max-width: 34em; }
-  .hero .month-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 540px; margin: 22px auto 0; padding: 18px 0; border: 1px solid var(--color-hairline-silver); border-radius: 16px; background: var(--color-paper-frost); }
+  .hero .lede { color: var(--color-slate); margin: 10px auto 0; max-width: 34em; font-size: 12.5px; line-height: 1.55; }
+  .daily-entry { margin: 10px auto 0; }
+  .daily-entry-btn {
+    min-height: 38px; padding: 7px 16px; font-size: 13px; font-weight: 600;
+    background: #eef5ff; border-color: #96bef2; color: #0058bd;
+    box-shadow: 0 1px 2px rgba(0, 102, 204, 0.08);
+  }
+  .daily-entry-btn:hover { background: #e0edff; }
+  .hero .month-stats {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 540px;
+    margin: 14px auto 0; padding: 14px 0; border: 1px solid #d8e0eb; border-radius: 16px;
+    background: var(--color-paper-frost); box-shadow: 0 1px 3px rgba(29, 29, 31, 0.04);
+    row-gap: 12px;
+  }
   .month-stat { min-width: 0; padding: 0 10px; }
-  .month-stat + .month-stat { border-left: 1px solid var(--color-hairline-silver); }
-  .stat-label { display: block; color: var(--color-slate); font-size: 12px; font-weight: 500; line-height: 18px; }
-  .stat-value { display: block; margin-top: 5px; font-size: clamp(22px, 5.6vw, 32px); font-weight: 600; line-height: 1.25; letter-spacing: -0.04em; white-space: nowrap; }
-  .stat-value small { margin-left: 3px; font-size: 12px; font-weight: 400; }
-  .stat-detail { display: block; margin-top: 6px; color: var(--color-slate); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+  .month-stat + .month-stat { border-left: 1px solid #dde3ec; }
+  .stat-label { display: block; color: var(--color-slate); font-size: 13px; font-weight: 600; line-height: 18px; }
+  .stat-value { display: block; margin-top: 4px; font-size: clamp(24px, 5.6vw, 32px); font-weight: 700; line-height: 1.2; letter-spacing: -0.03em; white-space: nowrap; }
+  .stat-value small { margin-left: 3px; font-size: 12px; font-weight: 500; }
+  .stat-detail { display: block; margin-top: 4px; color: var(--color-slate); font-size: 12.5px; line-height: 1.45; overflow-wrap: anywhere; }
 
   /* 承認済み参考画像に合わせた交換額の補足欄。 */
-  .hero{padding-top:30px;padding-bottom:20px}
-  .month-stats{row-gap:16px}
-  .exchange-summary{grid-column:1/-1;border-top:1px solid var(--color-hairline-silver);padding:14px 16px 0;text-align:left}
-  .exchange-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12px;color:var(--color-slate)}
-  .exchange-value{font-size:18px;font-weight:600;color:var(--color-ink);white-space:nowrap}
-  .exchange-rate{margin:5px 0 0;font-size:11px;color:var(--color-slate)}
-  .exchange-note{margin:10px 0 0;font-size:11px;line-height:1.65;color:var(--color-slate)}
-  .exchange-info{font-size:11px;color:var(--color-slate);margin-top:6px}
-  .exchange-info summary{cursor:pointer}
-  .exchange-info p{line-height:1.7;margin:8px 0 0}
-  .month-stats .month-stat{padding:0 8px}
-  .hero .lede{font-size:13px;line-height:1.7}
-  .kicker{font-size:19px;line-height:1.4}
-  .tools{padding-top:14px}
-  .months{padding-bottom:20px}
+  .exchange-summary{grid-column:1/-1;border-top:1px solid #dde3ec;padding:12px 14px 0;text-align:left}
+  .exchange-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:13px;color:var(--color-slate)}
+  .exchange-value{font-size:18px;font-weight:700;color:var(--color-ink);white-space:nowrap}
+  .exchange-rate{margin:4px 0 0;font-size:12.5px;color:var(--color-slate)}
+  .exchange-note{margin:6px 0 0;font-size:12.5px;line-height:1.55;color:var(--color-slate)}
+  .exchange-info{font-size:12.5px;color:var(--color-slate);margin-top:4px}
+  .exchange-info summary{cursor:pointer;color:var(--color-apple-blue);font-weight:500}
+  .exchange-info p{line-height:1.65;margin:6px 0 0}
+  .month-stats .month-stat{padding:0 12px}
 
-  /* お店のひとこと（2026-11-04）：月の集計と同じ枠で、文は左寄せ。 */
-  .day-comment { max-width:540px; margin:14px auto 0; padding:14px 16px; border:1px solid var(--color-hairline-silver); border-radius:16px; background:var(--color-paper-frost); text-align:left; }
-  .day-comment p { margin:6px 0 0; font-size:13px; line-height:1.7; color:var(--color-ink); overflow-wrap:anywhere; }
-  .data-status { max-width:540px; margin:14px auto 0; color:var(--color-slate); font-size:13px; line-height:1.6; }
+  /* お店のひとこと（2026-11-04）：月の集計と同じ枠で、文は左寄せ。左端に淡青アクセントで視認性を高める。 */
+  .day-comment { max-width:540px; margin:12px auto 0; padding:12px 14px; border:1px solid #d8e2ef; border-left:4px solid #72acf0; border-radius:14px; background:#f8fbff; text-align:left; }
+  .day-comment p { margin:4px 0 0; font-size:13px; line-height:1.65; color:var(--color-ink); overflow-wrap:anywhere; }
+  .data-status { max-width:540px; margin:8px auto 0; color:var(--color-slate); font-size:12.5px; line-height:1.5; }
   .data-status p { margin:0; }
-  .data-warning { max-width:540px; margin:12px auto; padding:12px; border:1px solid #b37413; border-radius:10px; background:#fff8e8; font-size:14px; line-height:1.6; text-align:left; }
-  .data-warning p { margin:6px 0; }
+  .data-warning { max-width:540px; margin:10px auto; padding:12px; border:1px solid #b37413; border-radius:12px; background:#fff8e8; font-size:13.5px; line-height:1.55; text-align:left; }
+  .data-warning p { margin:5px 0; }
   /* 日次学習・採用中の候補（2026-11-12。4画面で同じ順：切り替え → 重要な注意 → 候補数 → 機種ごとの候補 → 開閉式の説明）。 */
   dialog.daily-sheet {
     width: min(760px, calc(100% - 16px)); max-width: none; max-height: 92vh; max-height: 92dvh; overflow: hidden; overflow-wrap: anywhere;
@@ -168,28 +174,33 @@
   }
   .hero .month-stats { grid-template-columns:repeat(auto-fit,minmax(min(100%, 16rem),1fr)); }
   .month-stat { overflow-wrap:anywhere; }
-  .stat-value { white-space:normal; overflow-wrap:anywhere; font-size:clamp(26px, 5.6vw,32px); }
-  .stat-detail, .exchange-rate, .exchange-note, .exchange-info { font-size:14px; }
-  .stat-label, .exchange-head { font-size:14px; }
+  .stat-value { white-space:normal; overflow-wrap:anywhere; font-size:clamp(24px, 5.6vw, 32px); }
+  .stat-detail, .exchange-rate, .exchange-note, .exchange-info { font-size:13px; }
+  .stat-label, .exchange-head { font-size:13.5px; }
   .exchange-head { flex-wrap:wrap; }
   .month-stat + .month-stat { border-left:0; }
+  @media(min-width:601px) {
+    .month-stat + .month-stat { border-left:1px solid #dde3ec; }
+  }
   @media(max-width:600px) {
-    .hero { padding-top:24px; }
-    .headline { font-size:clamp(36px,10vw,52px); }
-    .month-stat { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); column-gap:12px; text-align:left; }
-    .stat-value { grid-column:2; grid-row:1 / 3; align-self:center; max-width:100%; }
+    .hero { padding-top:16px; }
+    .headline { font-size:clamp(28px, 8.5vw, 40px); }
+    .month-stat { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); column-gap:10px; text-align:left; }
+    .stat-value { grid-column:2; grid-row:1 / 3; align-self:center; justify-self:end; text-align:right; max-width:100%; }
     .stat-detail { grid-column:1; }
     .month-stat.large-number { display:block; }
-    .month-stat + .month-stat { padding-top:16px; border-top:1px solid var(--color-hairline-silver); }
+    .month-stat.large-number .stat-value { text-align:left; }
+    .month-stat + .month-stat { padding-top:12px; border-top:1px solid #dde3ec; }
   }
 
   /* 店舗の切り替え（2026-10-09 利用者「どこを選択してるかすぐわかるように。枠をつける・選択してるところは色つける」）：
      枠で囲んだ1本の帯に店舗を並べ、選んでいる店だけ青で塗る。 */
   .stores { text-align: center; padding: 4px var(--gutter) 0; }
-  .stores .caption { display: block; font-size: 12px; line-height: 16px; letter-spacing: -0.12px; color: var(--color-slate); margin-bottom: 8px; }
+  .stores .caption { display: block; font-size: 12px; line-height: 16px; letter-spacing: -0.12px; color: var(--color-slate); margin-bottom: 6px; }
   .anchors {
     display: inline-flex; gap: 4px; padding: 4px; max-width: 100%; overflow-x: auto; scrollbar-width: none;
-    background: var(--color-studio-mist); border: 1px solid var(--color-hairline-silver); border-radius: var(--radius-buttons);
+    background: var(--color-studio-mist); border: 1px solid #d4dce6; border-radius: var(--radius-buttons);
+    box-shadow: inset 0 1px 2px rgba(29, 29, 31, 0.04);
   }
   .anchors::-webkit-scrollbar { display: none; }
   .anchor {
@@ -199,29 +210,92 @@
   .anchor:hover { background: var(--color-control-gray); }
   .anchor[aria-pressed="true"] { background: var(--color-pricing-blue); color: #fff; font-weight: 600; }
   @media (max-width: 420px) { .anchor { padding: 8px 14px; } }
-  .months { display: flex; justify-content: center; gap: 8px; padding: 16px var(--gutter) 32px; }
+  .tools { text-align: center; padding: 12px var(--gutter) 16px; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+  .tool-btn {
+    min-height: 36px; padding: 7px 13px; font-size: 12.5px; font-weight: 500;
+    background: #fff; border-color: #cbd5e1; color: var(--color-ink);
+    box-shadow: 0 1px 2px rgba(29, 29, 31, 0.04);
+  }
+  .tool-btn:hover { background: #f4f7fb; border-color: #9fb3cb; }
 
   /* Highlights Stage（カレンダー） */
-  .stage { background: var(--color-studio-mist); padding: 40px max(12px, calc((100% - 980px) / 2)) 40px; }
-  .card { background: var(--color-gallery-white); border-radius: var(--radius-cards); overflow: hidden; }
+  .stage { background: var(--color-studio-mist); padding: 20px max(12px, calc((100% - 980px) / 2)) 32px; }
+  .card {
+    background: var(--color-gallery-white); border-radius: 22px; overflow: hidden;
+    border: 1px solid #dde3ec; box-shadow: 0 2px 8px rgba(29, 29, 31, 0.04);
+  }
+  .cal-bar {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 10px 14px; background: #fafbfd; border-bottom: 1px solid #e5eaf1;
+  }
+  .cal-ym { font-family: var(--font-display); font-size: 17px; font-weight: 700; color: var(--color-ink); letter-spacing: -0.02em; }
+  .months { display: flex; justify-content: center; align-items: center; gap: 6px; padding: 0; }
+  .months .pill { min-height: 34px; padding: 5px 12px; font-size: 12.5px; background: #fff; border-color: #cbd5e1; }
+  .months .pill:hover:not(:disabled) { background: #f1f5f9; }
+  .months .pill:disabled { background: #f8fafc; color: #94a3b8; border-color: #e2e8f0; }
   .weekdays, .grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
-  .weekdays { padding: 14px 0 10px; }
-  .weekdays span { text-align: center; font-size: 12px; line-height: 16px; letter-spacing: -0.12px; color: var(--color-slate); }
-  .grid { gap: 1px; background: var(--color-control-gray); border-top: 1px solid var(--color-control-gray); }
+  .weekdays { padding: 10px 0 8px; background: #fff; }
+  .weekdays span { text-align: center; font-size: 12px; font-weight: 600; line-height: 16px; letter-spacing: -0.12px; color: var(--color-slate); }
+  .weekdays span.sun { color: #c23b2b; }
+  .weekdays span.sat { color: #1558b0; }
+  .grid { gap: 1px; background: #dde3ec; border-top: 1px solid #dde3ec; }
   .day, .blank {
-    background: var(--color-gallery-white); min-height: 84px; padding: 8px 6px 8px; border: 0; text-align: left;
+    background: var(--color-gallery-white); min-height: 86px; padding: 7px 5px 7px; border: 0; text-align: left;
     display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0;
   }
-  .day[data-open], .day[data-summary-open], .day[data-birthday-open] { cursor: pointer; }
-  .day[data-open]:hover, .day[data-summary-open]:hover, .day[data-birthday-open]:hover { background: var(--color-paper-frost); }
-  .day .date { font-size: 14px; font-weight: 600; line-height: 24px; min-width: 24px; height: 24px; text-align: center; border-radius: 12px; }
-  .day.today .date { background: var(--color-pricing-blue); color: #fff; padding: 0 6px; }
-  .day .event { font-size: 11px; line-height: 1.25; letter-spacing: -0.1px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-all; }
-  .day .event.none { color: var(--color-slate); }
-  /* キャラ誕生日：イベント名と分けて色を変え、2行まで（全員は押した先で）。 */
-  .day .birthday { font-size: 10px; line-height: 1.2; font-weight: 600; color: var(--color-birthday); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-all; }
-  .day .net { margin-top: auto; font-size: 12px; font-weight: 600; line-height: 16px; letter-spacing: -0.2px; white-space: nowrap; }
-  .legend { font-size: 12px; line-height: 1.33; letter-spacing: -0.12px; color: var(--color-slate); margin: 16px 8px 0; }
+  .blank { background: #f7f8fa; }
+  /* ヒートマップ：色覚多様性に強い青×橙の発散スケール（1台平均差枚ベース）。文字コントラスト WCAG AA 以上を維持。 */
+  .day.heat-plus-3 { background: #cce4ff; box-shadow: inset 0 0 0 1.5px #7bb4f5; }
+  .day.heat-plus-2 { background: #e3f0ff; }
+  .day.heat-plus-1 { background: #f3f9ff; }
+  .day.heat-zero { background: #ffffff; }
+  .day.heat-minus-1 { background: #fff7f2; }
+  .day.heat-minus-2 { background: #ffeadd; }
+  .day.heat-rate { background: #f3f6fa; }
+  .day.heat-empty { background: #f7f7f9; }
+  .day.heat-empty .date { color: #76767c; font-weight: 500; }
+  .day.sun .date { color: #c23b2b; }
+  .day.sat .date { color: #1558b0; }
+  .day.heat-empty.sun .date { color: #b8675d; }
+  .day.heat-empty.sat .date { color: #567eb0; }
+  .day[data-open], .day[data-summary-open], .day[data-birthday-open], .day[data-event-open] { cursor: pointer; }
+  .day[data-open]:hover, .day[data-summary-open]:hover, .day[data-birthday-open]:hover, .day[data-event-open]:hover { filter: brightness(0.96); }
+  .day.today { box-shadow: inset 0 0 0 2px var(--color-pricing-blue); }
+  .day .date { font-size: 13.5px; font-weight: 700; line-height: 22px; min-width: 22px; height: 22px; text-align: center; border-radius: 11px; }
+  .day.today .date { background: var(--color-pricing-blue); color: #fff !important; padding: 0 6px; font-weight: 700; }
+  /* イベント名：誕生日の紫文字に埋もれないよう淡琥珀タグで最優先に視認させる。 */
+  .day .event {
+    width: 100%; padding: 1px 3px; border-radius: 4px;
+    background: #fef3c7; border: 1px solid #ebd07c; color: #5c3700;
+    font-size: 11px; font-weight: 600; line-height: 1.25; letter-spacing: -0.15px;
+    overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-all;
+  }
+  .day .event.none { background: transparent; border: 0; padding: 0; color: var(--color-slate); font-weight: 400; }
+  /* キャラ誕生日：イベント名より控えめなウェイトで視覚階層を整理（全員は押した先で）。 */
+  .day .birthday { font-size: 10px; line-height: 1.2; font-weight: 500; color: #6b3794; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-all; }
+  .day .net { margin-top: auto; font-size: 12px; font-weight: 700; line-height: 16px; letter-spacing: -0.25px; white-space: nowrap; }
+  .day .net.plus { color: #004ea8; }
+  .day .net.minus { color: #9c3400; }
+  .day .net.zero { color: #475569; }
+  .cal-key {
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 12px;
+    padding: 9px 12px; background: #fafbfd; border-top: 1px solid #e5eaf1;
+    font-size: 11px; line-height: 1.4; color: #555e6b;
+  }
+  .cal-key-item { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .cal-swatch { display: inline-block; width: 11px; height: 11px; border-radius: 3px; border: 1px solid rgba(29, 29, 31, 0.16); }
+  .cal-swatch.sw-plus-3 { background: #cce4ff; border-color: #7bb4f5; }
+  .cal-swatch.sw-plus-1 { background: #eef6ff; }
+  .cal-swatch.sw-minus-2 { background: #ffeadd; }
+  .cal-swatch.sw-event { background: #fef3c7; border-color: #ebd07c; }
+  .cal-swatch.sw-empty { background: #f2f3f6; }
+  /* 更新・差枚の取得状況（パディングと余白を整え、カレンダー本体から分離）。 */
+  details.card[data-health] { margin-top: 14px; padding: 12px 16px; border-radius: 16px; }
+  details.card[data-health] > summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--color-ink); line-height: 1.5; }
+  details.card[data-health] > p:first-of-type { margin: 10px 0 6px; font-size: 14px; font-weight: 600; }
+  details.card[data-health] label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0; font-size: 13px; color: var(--color-slate); }
+  details.card[data-health] select { min-height: 36px; padding: 4px 10px; border: 1px solid #b6c2d2; border-radius: 8px; background: #fff; color: var(--color-ink); font: inherit; font-size: 14px; }
+  .legend { font-size: 12px; line-height: 1.5; letter-spacing: -0.1px; color: var(--color-slate); margin: 14px 6px 0; }
 
   /* Footer */
   footer { background: var(--color-studio-mist); border-top: 1px solid var(--color-hairline-silver); padding: 20px var(--gutter) 40px; }
@@ -269,36 +343,53 @@
     flex: 1; min-width: 0; min-height: 36px; font: inherit; font-size: 15px; text-align: center; text-align-last: center;
     border: 1px solid var(--color-steel); border-radius: 10px; background: var(--color-gallery-white); color: var(--color-ink);
   }
-  .sheet .store { font-size: 14px; line-height: 1.29; letter-spacing: -0.224px; color: var(--color-slate); margin: 0; }
-  .sheet h2 { font-family: var(--font-display); font-size: 40px; font-weight: 600; line-height: 1.1; letter-spacing: 0; margin: 6px 0 8px; }
-  .sheet .event-line { margin: 0; }
+  .sheet .store { font-size: 13.5px; line-height: 1.3; letter-spacing: -0.2px; color: var(--color-slate); margin: 12px 0 0; }
+  .sheet h2 { font-family: var(--font-display); font-size: 34px; font-weight: 700; line-height: 1.15; letter-spacing: -0.015em; margin: 4px 0 8px; }
+  .sheet .event-line { margin: 4px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 14.5px; }
   .event-compare-link {
-    max-width: 100%; min-height: 44px; padding: 0; border: 0; background: none;
-    color: var(--color-pricing-blue); font: inherit; font-weight: 600; text-align: start;
-    text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 4px; max-width: 100%; min-height: 36px; padding: 5px 12px;
+    border: 1px solid #c3dcfb; border-radius: 10px; background: #eef5ff;
+    color: #0058bd; font: inherit; font-weight: 600; text-align: start;
+    text-decoration: none; overflow-wrap: anywhere; cursor: pointer;
   }
+  .event-compare-link:hover { background: #e0edff; border-color: #96bef2; }
   .event-compare-table {
     width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 3px;
     text-align: center; font-size: 13px;
   }
-  .event-compare-table th, .event-compare-table td { padding: 6px 2px; overflow-wrap: anywhere; }
-  .event-compare-table thead th { background: var(--color-paper-frost); border-radius: 8px; }
-  .event-compare-table tbody th { padding: 12px 4px 2px; text-align: start; }
+  .event-compare-table th, .event-compare-table td { padding: 7px 3px; overflow-wrap: anywhere; }
+  .event-compare-table thead th { background: #eef2f7; color: #334155; border-radius: 8px; font-weight: 600; }
+  .event-compare-table tbody th { padding: 8px 8px 6px; text-align: start; background: #f4f7fb; border-radius: 8px; font-size: 13.5px; }
   .event-compare-table td {
-    background: var(--color-gallery-white); border: 1px solid var(--color-control-gray);
+    background: var(--color-gallery-white); border: 1px solid #dce3ed;
     border-radius: 8px; vertical-align: top;
   }
+  .event-compare-table td.event-cell-plus { background: #f2f8ff; border-color: #cde2fc; }
+  .event-compare-table td.event-cell-minus { background: #fff6f0; border-color: #f6d8c4; }
+  .event-compare-table td.event-cell-empty { background: #f8f9fb; color: var(--color-slate); }
   .event-compare-table small, .event-compare-table td span { display: block; }
-  .event-compare-table small { color: var(--color-slate); font-weight: 400; }
-  .sheet .birthday-line { margin: 8px 0 0; color: var(--color-birthday); }
-  .sheet .birthday-line p { margin: 0; overflow-wrap: anywhere; }
-  .sheet .birthday-line .label { font-size: 12px; font-weight: 600; }
-  .total { margin: 28px 0 0; }
-  .total .label { font-size: 14px; letter-spacing: -0.224px; color: var(--color-slate); }
-  .total .value { font-family: var(--font-display); font-size: 48px; font-weight: 600; line-height: 1.08; letter-spacing: -0.5px; display: block; }
-  .total .sub { font-size: 14px; letter-spacing: -0.224px; color: var(--color-slate); }
-  .sheet h3 { font-family: var(--font-display); font-size: 24px; font-weight: 600; line-height: 1.17; margin: 40px 0 2px; }
-  .sheet .caption { font-size: 14px; letter-spacing: -0.224px; color: var(--color-slate); margin: 0 0 12px; }
+  .event-compare-table td span + span { margin-top: 2px; font-weight: 700; }
+  .event-compare-table small { color: var(--color-slate); font-weight: 400; margin-top: 2px; }
+  .sheet .birthday-line {
+    margin: 10px 0 0; padding: 10px 12px; border-radius: 12px;
+    background: #faf5ff; border: 1px solid #e6d5f5; border-left: 4px solid #9b59c6;
+    color: #5d2b84;
+  }
+  .sheet .birthday-line p { margin: 2px 0 0; overflow-wrap: anywhere; font-size: 14px; line-height: 1.45; }
+  .sheet .birthday-line .label { margin: 0 0 2px; font-size: 12px; font-weight: 700; color: #7439a3; }
+  .total { margin: 18px 0 0; }
+  .total.total-card {
+    padding: 14px 16px; border-radius: 16px; border: 1px solid #dde3ec; border-left: 4px solid #94a3b8;
+    background: #f8fafc; box-shadow: 0 1px 2px rgba(29, 29, 31, 0.03);
+  }
+  .total.total-card.total-plus { background: #f2f8ff; border-color: #c8e0fb; border-left-color: #0071e3; }
+  .total.total-card.total-minus { background: #fff6f0; border-color: #f5d6c1; border-left-color: #d45510; }
+  .total.total-card.total-rate { background: #f5f8fc; border-color: #d7e1ee; border-left-color: #4f6f99; }
+  .total .label { font-size: 13px; font-weight: 600; letter-spacing: -0.1px; color: var(--color-slate); display: block; }
+  .total .value { font-family: var(--font-display); font-size: clamp(36px, 9.5vw, 46px); font-weight: 700; line-height: 1.1; letter-spacing: -0.5px; display: block; margin-top: 2px; }
+  .total .sub { font-size: 13px; letter-spacing: -0.15px; color: #525864; display: block; margin-top: 4px; line-height: 1.45; }
+  .sheet h3 { font-family: var(--font-display); font-size: 21px; font-weight: 700; line-height: 1.25; margin: 28px 0 4px; }
+  .sheet .caption { font-size: 13.5px; line-height: 1.5; letter-spacing: -0.15px; color: var(--color-slate); margin: 0 0 12px; }
   /* 機種別データピックアップ：カード枠・1〜3位の順位色・差枚と勝率の強調で見分けやすくする。 */
   .machine-pickups { display: grid; gap: 12px; }
   .pickup-card {
@@ -412,34 +503,41 @@
     .machine-pickup td.pickup-total { font-size: 13.5px; }
     .machine-pickup td .pickup-ratio { font-size: 10.5px; }
   }
-  .list { background: var(--color-studio-mist); border-radius: var(--radius-cards); padding: 6px 20px; list-style: none; margin: 0; }
-  .list li { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-top: 1px solid var(--color-control-gray); }
+  .list {
+    background: var(--color-gallery-white); border: 1px solid #dde3ec; border-radius: 16px;
+    padding: 4px 16px; list-style: none; margin: 0;
+    box-shadow: 0 1px 2px rgba(29, 29, 31, 0.03);
+  }
+  .list li { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-top: 1px solid #edf1f6; }
   .list .row {
-    display: flex; align-items: center; gap: 14px; width: 100%; padding: 0; margin: 0; border: 0; background: none;
+    display: flex; align-items: center; gap: 12px; width: 100%; padding: 0; margin: 0; border: 0; background: none;
     font: inherit; color: inherit; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent;
   }
   .list .row:focus-visible { outline: 2px solid var(--color-pricing-blue); outline-offset: 2px; border-radius: 6px; }
   .list .row:active .main, .list .row:active .right { opacity: 0.6; }
-  .list li.current { margin: 0 -20px; padding-left: 20px; padding-right: 20px; background: var(--color-control-gray); }
-  .list .chev { flex: none; font-size: 22px; line-height: 1; color: var(--color-steel); margin-left: -4px; }
+  .list li.current {
+    margin: 0 -16px; padding-left: 16px; padding-right: 16px;
+    background: #eaf3ff; box-shadow: inset 4px 0 0 var(--color-pricing-blue);
+  }
+  .list .chev { flex: none; font-size: 20px; line-height: 1; color: #94a3b8; margin-left: -2px; }
   .more { margin-top: 10px; }
   .more summary {
-    list-style: none; cursor: pointer; display: inline-block; padding: 8px 4px; font-size: 15px; letter-spacing: -0.24px;
-    color: var(--color-apple-blue);
+    list-style: none; cursor: pointer; display: inline-flex; align-items: center; padding: 8px 12px;
+    border-radius: 9999px; background: #eef5ff; border: 1px solid #cde2fc;
+    font-size: 14px; font-weight: 600; letter-spacing: -0.2px; color: #0058bd;
   }
   .more summary::-webkit-details-marker { display: none; }
   .more summary::after {
     content: ''; display: inline-block; width: 7px; height: 7px; margin: 0 0 2px 8px; vertical-align: middle;
     border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); transition: transform 0.2s;
   }
-  .more[open] summary::after { transform: rotate(45deg); margin-bottom: 5px; }
-  .more .list { margin-top: 6px; }
+  .more[open] summary::after { transform: rotate(45deg); margin-bottom: 4px; }
+  .more .list { margin-top: 8px; }
   .sheet-head .spacer { flex: 1; }
-  .tools { text-align: center; padding: 16px var(--gutter) 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
   /* 🌈のボタン（台のデータ・バラエティ🌈の行の右）。 */
   .mark-btn { flex: none; white-space: nowrap; }
   .mark-btn.mark-small { padding: 6px 12px; font-size: 13px; }
-  .mark-btn.mark-large { margin: 4px 0 8px; }
+  .mark-btn.mark-large { margin: 8px 0 6px; }
   .list li.with-mark { display: flex; align-items: center; gap: 8px; }
   .list li.with-mark > .row { flex: 1; min-width: 0; }
   .list li.with-mark > div.row { display: flex; align-items: center; padding: 12px 0; }
@@ -455,7 +553,7 @@
   .candidate-list { list-style: none; padding: 0; margin: 0; }
   .candidate-list li { margin: 0 0 10px; }
   .candidate-card { display: flex; align-items: center; width: 100%; text-align: left; padding: 14px; gap: 12px;
-    background: #fff; border: 1px solid var(--color-control-gray); border-radius: 8px; color: var(--color-ink); font: inherit; cursor: pointer; }
+    background: #fff; border: 1px solid #dde3ec; border-radius: 12px; color: var(--color-ink); font: inherit; cursor: pointer; }
   .candidate-card .main { flex: 1; min-width: 0; }
   .candidate-title { display: block; font-size: 18px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
   .candidate-title .rack { margin-right: 10px; white-space: nowrap; }
@@ -466,8 +564,13 @@
   .candidate-card:focus-visible { outline: 2px solid var(--color-pricing-blue); outline-offset: 2px; }
   .week-marked { margin-top: 20px; }
   .week-marked summary { font-size: 15px; padding: 10px 0; cursor: pointer; }
-  .variety-sort { display: flex; gap: 8px; align-items: center; font-size: 14px; margin-bottom: 12px; }
-  .variety-sort select { flex: 1; min-width: 0; padding: 8px; }
+  .variety-sort { display: flex; gap: 8px; align-items: center; font-size: 14px; color: var(--color-slate); margin: 10px 0 12px; }
+  .variety-sort select {
+    flex: 1; min-width: 0; min-height: 40px; padding: 6px 10px;
+    border: 1px solid #b6c2d2; border-radius: 10px; background: #fff; color: var(--color-ink);
+    font: 15px/1.2 var(--font-text);
+  }
+  .variety-sort select:focus { outline: 2px solid var(--color-pricing-blue); outline-offset: 1px; }
   .rotation { display: grid; gap: 3px; margin-top: 4px; }
   .rotation .r { display: grid; grid-template-columns: 76px repeat(7, minmax(0, 1fr)) 40px; gap: 3px; align-items: stretch; }
   .rotation .head span { font-size: 12px; color: var(--color-slate); text-align: center; padding: 4px 0; }
@@ -558,7 +661,7 @@
   .choices label { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
   .choices label span { font-size: 12px; line-height: 16px; letter-spacing: -0.12px; color: var(--color-slate); }
   .choices select {
-    width: 100%; min-width: 0; height: 40px; padding: 0 8px; border: 1px solid var(--color-steel); border-radius: 10px;
+    width: 100%; min-width: 0; height: 40px; padding: 0 8px; border: 1px solid #b6c2d2; border-radius: 10px;
     background: #fff; color: var(--color-ink); font: 15px/1.2 var(--font-text);
   }
   .choices select:focus { outline: 2px solid var(--color-pricing-blue); outline-offset: 1px; }
@@ -569,45 +672,227 @@
     .choices.one { grid-template-columns: minmax(0, 1fr); }
   }
   .list .detail { display: block; font-size: 12px; line-height: 1.4; letter-spacing: -0.12px; color: var(--color-slate); margin-top: 2px; white-space: normal; }
-  .sheet h2.long { font-size: 28px; line-height: 1.18; word-break: break-word; }
+  .sheet h2.long { font-size: 26px; line-height: 1.22; word-break: break-word; }
   .stats {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 1px; margin: 28px 0 0;
-    background: var(--color-control-gray); border-radius: var(--radius-cards); overflow: hidden;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 1px; margin: 18px 0 0;
+    background: #e2e8f0; border: 1px solid #dde3ec; border-radius: 16px; overflow: hidden;
+    box-shadow: 0 1px 2px rgba(29, 29, 31, 0.03);
   }
-  .stats div { background: var(--color-studio-mist); padding: 12px 16px; }
+  .stats div { background: var(--color-gallery-white); padding: 12px 14px; }
+  .stats div:nth-child(1), .stats div:nth-child(2) { background: #f8fbff; }
   .stats div:last-child:nth-child(odd) { grid-column: 1 / -1; }
-  .stats dt { font-size: 12px; line-height: 16px; letter-spacing: -0.12px; color: var(--color-slate); }
-  .stats dd { margin: 2px 0 0; font-size: 20px; font-weight: 600; line-height: 1.2; }
+  .stats dt { font-size: 12px; font-weight: 600; line-height: 16px; letter-spacing: -0.1px; color: #5f6b7a; }
+  .stats dd { margin: 3px 0 0; font-size: 20px; font-weight: 700; line-height: 1.2; color: var(--color-ink); }
   .list li:first-child { border-top: 0; }
-  .list .rank { width: 22px; flex: none; font-size: 17px; font-weight: 600; color: var(--color-slate); text-align: right; }
+  .list .rank { min-width: 28px; flex: none; font-size: 15px; font-weight: 700; color: #64748b; text-align: center; }
+  .list .rank.rank-top {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 28px; height: 26px; padding: 0 7px; border-radius: 9999px;
+    font-size: 12.5px; font-weight: 700; line-height: 1;
+  }
+  .list .rank.rank-1 { background: #f9d56e; color: #5f3400; border: 1px solid #dfa928; }
+  .list .rank.rank-2 { background: #d5dfec; color: #1e293b; border: 1px solid #9fb0c6; }
+  .list .rank.rank-3 { background: #f2ccb0; color: #6b2d0a; border: 1px solid #d89f78; }
   .list .main { flex: 1; min-width: 0; }
-  .list .rack { font-size: 12px; line-height: 16px; letter-spacing: -0.12px; color: var(--color-slate); }
-  .list .machine { font-size: 17px; line-height: 1.24; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .list .rack { font-size: 12.5px; line-height: 16px; letter-spacing: -0.12px; color: var(--color-slate); }
+  .list .machine { font-size: 16px; font-weight: 600; line-height: 1.28; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .list .right { text-align: right; flex: none; }
-  .list .value { font-size: 17px; font-weight: 600; line-height: 1.24; }
+  .list .value { font-size: 16.5px; font-weight: 700; line-height: 1.24; }
   .list .small { font-size: 12px; line-height: 16px; letter-spacing: -0.12px; color: var(--color-slate); }
-  .note { font-size: 12px; line-height: 1.33; letter-spacing: -0.12px; color: var(--color-slate); margin: 10px 4px 0; }
+  .rate-bar { display: block; width: 68px; height: 5px; margin: 4px 0 0 auto; border-radius: 9999px; background: #e6ecf3; overflow: hidden; }
+  .rate-bar-fill { display: block; height: 100%; border-radius: 9999px; background: #7b8ea8; }
+  .rate-bar-fill.good { background: #17805d; }
+  .note { font-size: 12px; line-height: 1.4; letter-spacing: -0.1px; color: var(--color-slate); margin: 10px 4px 0; }
 
   @media (max-width: 420px) {
     :root { --gutter: 16px; }
-    .stage { padding: 24px 8px 32px; }
-    .day, .blank { min-height: 76px; padding: 6px 3px; }
-    .day .date { font-size: 13px; }
-    .day .event { font-size: 12px; }
-    .day .birthday { font-size: 11px; }
-    .day .net { font-size: 12px; letter-spacing: -0.1px; }
+    .stage { padding: 14px 6px 28px; }
+    .card { border-radius: 18px; }
+    .cal-bar { padding: 10px 10px; justify-content: center; }
+    .cal-ym { font-size: 15.5px; width: 100%; text-align: center; }
+    .months .pill { min-height: 34px; padding: 4px 10px; font-size: 12px; }
+    .day, .blank { min-height: 78px; padding: 5px 3px 6px; gap: 2.5px; }
+    .day .date { font-size: 12.5px; line-height: 20px; min-width: 20px; height: 20px; }
+    .day .event { font-size: 11px; padding: 1px 2px; line-height: 1.2; }
+    .day .birthday { font-size: 10.5px; line-height: 1.18; }
+    .day .net { font-size: 11.5px; letter-spacing: -0.2px; }
     .weekdays span { font-size: 12px; }
+    .cal-key { gap: 5px 9px; padding: 8px 8px; font-size: 10.5px; }
+    .list { padding: 4px 12px; }
+    .list li.current { margin: 0 -12px; padding-left: 12px; padding-right: 12px; }
+  }
+  @media (max-width: 340px) {
+    .day .net { font-size: 10.5px; letter-spacing: -0.35px; }
+    .day .event { font-size: 10px; }
+    .day .birthday { font-size: 9.5px; }
   }
 /* 4大オススメは既存の機種カード・週表の形を保つ。 */
 .recommendation-card{border:1px solid #dce4ef;border-radius:12px;padding:10px;margin:14px 0}.recommendation-card>h3{display:block!important;font-size:15px;margin:0 0 12px;line-height:1.5}.recommendation-card .history-overflow{overflow-x:auto;border:0}.recommendation-card>label{display:block;font-weight:600;margin-bottom:12px}.recommendation-card select{display:block;width:100%;max-width:100%;margin-top:6px}.recommendation-table{width:100%;min-width:340px;table-layout:fixed;border-collapse:separate;border-spacing:2px}.recommendation-table th{font-size:11px;font-weight:500;text-align:center}.recommendation-table th:first-child{width:44px}.recommendation-table small{display:block;font-size:10px}.recommendation-cell{display:flex!important;flex-direction:column;align-items:center;justify-content:center;gap:2px;width:100%;min-height:56px;padding:4px 1px!important;border:0;border-radius:6px;background:#f4f7fb;font-size:19px}.recommendation-face{width:100%;font-size:17px;padding:4px 0;min-height:40px}.recommendation-pick{position:relative;display:flex;align-items:center;justify-content:center;min-height:40px;margin-bottom:2px;border-radius:6px;background:#f4f7fb;overflow:hidden}.recommendation-face-shown{display:flex;align-items:center;font-size:19px;line-height:1;white-space:nowrap;pointer-events:none}.recommendation-caret{font-size:9px;margin-left:1px;color:#64748b}.recommendation-card .recommendation-pick select.recommendation-face{position:absolute;inset:0;width:100%;height:100%;min-height:0;margin:0;padding:0;opacity:0;font-size:16px;-webkit-appearance:none;appearance:none}.recommendation-cell{min-height:30px!important}.recommendation-cell .num{font-size:10px;white-space:nowrap}.recommendation-table .plus{color:#15803d}.recommendation-table .minus{color:#b91c1c}
 .recommendation-table{border-spacing:0 6px}.recommendation-table tbody th,.recommendation-table tbody td{padding:5px 1px}.recommendation-table tbody tr:nth-child(odd) th,.recommendation-table tbody tr:nth-child(odd) td{background:#e6eef8}.recommendation-table tbody th{border-radius:12px 0 0 12px;padding-left:4px}.recommendation-table tbody td:last-child{border-radius:0 12px 12px 0;padding-right:4px}.recommendation-table tbody tr:nth-child(odd) .recommendation-pick,.recommendation-table tbody tr:nth-child(odd) .recommendation-cell{background:#fff}
   .sheet .note { font-size:14px; line-height:1.6; }
-  /* 台番の末尾の印（2026-11-05） */
-  .suffix-pick { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 12px; }
-  .suffix-pick .suffix-label { font-size: 14px; color: var(--color-slate); margin-right: 2px; }
-  .suffix-pick .suffix-digit { min-width: 32px; min-height: 32px; padding: 0 8px; font-size: 15px; }
-  .suffix-pick .suffix-clear { min-height: 32px; padding: 4px 12px; font-size: 14px; }
-  .suffix-mark { display: inline-block; margin-left: 6px; padding: 0 5px; border-radius: 6px; background: var(--color-pricing-blue); color: #fff; font-size: 11px; line-height: 16px; vertical-align: 1px; font-weight: 600; }
+  /* 台番の末尾の印（2026-11-05）：スマホでは5列×2段で整然と並べ、押しやすい高さにする。 */
+  .suffix-pick { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 12px; }
+  .suffix-pick .suffix-label { font-size: 13.5px; font-weight: 600; color: var(--color-slate); }
+  .suffix-digits { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 6px; flex: 1; min-width: 0; }
+  .suffix-pick .suffix-digit { min-width: 0; min-height: 36px; padding: 0 4px; font-size: 15px; font-weight: 600; }
+  .suffix-pick .suffix-clear { min-height: 36px; padding: 4px 12px; font-size: 13.5px; font-weight: 600; }
+  @media (max-width: 520px) {
+    .suffix-pick { align-items: flex-start; }
+    .suffix-pick .suffix-label { padding-top: 8px; }
+    .suffix-digits { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    .suffix-pick .suffix-digit { min-height: 38px; }
+  }
+  .suffix-mark { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 6px; background: var(--color-pricing-blue); color: #fff; font-size: 11px; line-height: 16px; vertical-align: 1px; font-weight: 700; }
+
+  /* 機能5：最新営業日の3店舗比較コンパクトカード（2026-11-27）。カレンダーと同じ青×橙ヒートマップ色調で統一。 */
+  .store-compare { max-width: 580px; margin: 10px auto 2px; padding: 0 var(--gutter); }
+  .store-compare-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 8px; margin: 0 2px 6px; }
+  .store-compare-title { font-size: 12px; font-weight: 700; color: #3a3a3f; letter-spacing: -0.1px; }
+  .store-compare-hint { font-size: 11px; color: var(--color-slate); }
+  .store-compare-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 6px; }
+  .store-compare-card {
+    position: relative; min-width: 0; padding: 8px 8px 7px; border-radius: 14px;
+    border: 1px solid #d8e0eb; background: #fff; text-align: left;
+    display: flex; flex-direction: column; gap: 3px;
+    box-shadow: 0 1px 2px rgba(29, 29, 31, 0.04);
+    transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
+  }
+  .store-compare-card.heat-plus-3 { background: #d6e9ff; border-color: #88bcf7; }
+  .store-compare-card.heat-plus-2 { background: #e8f3ff; border-color: #bad7fb; }
+  .store-compare-card.heat-plus-1 { background: #f4f9ff; border-color: #d1e4fc; }
+  .store-compare-card.heat-minus-1 { background: #fff8f3; border-color: #f3dccb; }
+  .store-compare-card.heat-minus-2 { background: #ffede1; border-color: #efc4a7; }
+  .store-compare-card.heat-rate { background: #f4f7fb; border-color: #d4deec; }
+  .store-compare-card.heat-empty { background: #f7f7f9; border-color: #e2e5eb; }
+  .store-compare-card.active {
+    border-color: var(--color-pricing-blue);
+    box-shadow: 0 0 0 1px var(--color-pricing-blue), 0 2px 6px rgba(0, 113, 227, 0.14);
+  }
+  .store-compare-card:hover { filter: brightness(0.98); }
+  .store-compare-top { display: flex; align-items: baseline; justify-content: space-between; gap: 4px; min-width: 0; }
+  .store-compare-name { font-size: 12px; font-weight: 700; color: var(--color-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .store-compare-day { font-size: 11px; font-weight: 600; color: #525c6b; flex: none; }
+  .store-compare-event {
+    display: block; width: 100%; padding: 1px 4px; border-radius: 4px;
+    background: #fef3c7; border: 1px solid #ebd07c; color: #5c3700;
+    font-size: 10.5px; font-weight: 600; line-height: 1.25;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .store-compare-event.empty {
+    background: rgba(255, 255, 255, 0.6); border-color: transparent; color: #7a8391; font-weight: 500;
+  }
+  .store-compare-main { font-family: var(--font-display); font-size: 16px; font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; white-space: nowrap; margin-top: 1px; }
+  .store-compare-main.plus { color: #004ea8; }
+  .store-compare-main.minus { color: #9c3400; }
+  .store-compare-meta { display: flex; flex-wrap: wrap; gap: 0 5px; font-size: 10.5px; line-height: 1.3; color: #475569; min-width: 0; }
+  .store-compare-meta span { white-space: nowrap; }
+  .store-compare-cta {
+    margin-top: auto; padding: 2px 0 0; border: 0; background: transparent;
+    font-size: 10.5px; font-weight: 600; color: var(--color-apple-blue); text-align: right; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .store-compare-cta:disabled { color: var(--color-slate); cursor: default; }
+  .store-compare-cta::after { content: ''; position: absolute; inset: 0; border-radius: 14px; }
+  .store-compare-cta:focus-visible { outline: none; }
+  .store-compare-cta:focus-visible::after { outline: 2px solid var(--color-pricing-blue); outline-offset: 2px; }
+  @media (max-width: 420px) {
+    .store-compare { padding: 0 10px; }
+    .store-compare-card { padding: 7px 6px 6px; border-radius: 12px; }
+    .store-compare-name { font-size: 11.5px; }
+    .store-compare-day { font-size: 10px; }
+    .store-compare-main { font-size: 14.5px; }
+    .store-compare-meta { font-size: 10px; }
+  }
+  @media (max-width: 340px) {
+    .store-compare { padding: 0 6px; }
+    .store-compare-grid { gap: 4px; }
+    .store-compare-card { padding: 6px 5px 5px; }
+    .store-compare-name { font-size: 10.5px; }
+    .store-compare-day { font-size: 9.5px; }
+    .store-compare-event { font-size: 9.5px; padding: 1px 3px; }
+    .store-compare-main { font-size: 13px; }
+    .store-compare-meta { font-size: 9.5px; gap: 0 3px; }
+    .store-compare-cta { font-size: 9.5px; }
+  }
+
+  /* 機能4：クイック検索ボタン・検索シート（2026-11-27）。 */
+  .tool-btn-search { background: #eef5ff; border-color: #96bef2; color: #0058bd; font-weight: 600; }
+  .tool-btn-search:hover { background: #e0edff; border-color: #6ea5eb; }
+  .search-periods { margin: 10px 0 8px; }
+  .search-sorts { margin: 12px 0 4px; }
+  .search-box { display: flex; align-items: center; gap: 6px; margin: 10px 0 6px; }
+  .search-input {
+    flex: 1; min-width: 0; min-height: 44px; padding: 8px 14px;
+    border: 1.5px solid #9db0c8; border-radius: 12px; background: #fff; color: var(--color-ink);
+    font: 16px/1.3 var(--font-text);
+  }
+  .search-input:focus { outline: none; border-color: var(--color-pricing-blue); box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.16); }
+  .search-clear { min-width: 40px; min-height: 44px; padding: 0 12px; font-size: 18px; line-height: 1; flex: none; }
+  .search-clear[hidden] { display: none; }
+  .search-section { margin-top: 14px; }
+  .sheet .search-sub { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--color-ink); }
+  .search-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .search-chip {
+    max-width: 100%; min-height: 36px; padding: 6px 11px; font-size: 13px; font-weight: 500;
+    background: #f6f9fd; border-color: #c7d6ea; color: var(--color-ink);
+  }
+  .search-chip:hover { background: #e8f1fd; border-color: #8eb7ee; }
+  .search-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .search-chip-count { font-size: 11px; color: var(--color-slate); flex: none; }
+  .search-event-tag {
+    display: inline-block; margin-left: 4px; padding: 1px 6px; border-radius: 4px;
+    background: #fef3c7; border: 1px solid #ebd07c; color: #5c3700;
+    font-size: 11px; font-weight: 600; vertical-align: 1px;
+  }
+
+  /* 機能1：台詳細画面の直近7日間の推移（2026-11-27）。中央0基準線から青（＋）／橙（−）へ伸びる相対ミニバー。 */
+  .rack-trend { margin-top: 22px; }
+  .rack-trend h3 { margin: 0 0 6px; }
+  .rack-trend-summary {
+    margin: 0 0 8px; padding: 8px 12px; border-radius: 10px;
+    background: #f4f7fb; border: 1px solid #dde5f0;
+    font-size: 12.5px; font-weight: 600; line-height: 1.5; color: #334155;
+  }
+  .rack-trend-list {
+    list-style: none; margin: 0; padding: 0 12px; overflow: hidden;
+    background: #fff; border: 1px solid #dde3ec; border-radius: 16px;
+    box-shadow: 0 1px 2px rgba(29, 29, 31, 0.03);
+  }
+  .rack-trend-list li { border-top: 1px solid #edf1f6; }
+  .rack-trend-list li:first-child { border-top: 0; }
+  .rack-trend-item {
+    display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 2px;
+    border: 0; background: transparent; text-align: left; color: inherit;
+  }
+  .rack-trend-item.clickable { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .rack-trend-item.clickable:hover { background: #f8fbff; }
+  .rack-trend-item.clickable:focus-visible { outline: 2px solid var(--color-pricing-blue); outline-offset: -2px; border-radius: 8px; }
+  .rack-trend-item.current {
+    margin: 0 -12px; width: calc(100% + 24px); padding: 10px 14px;
+    background: #edf5ff; box-shadow: inset 4px 0 0 var(--color-pricing-blue);
+  }
+  .rack-trend-item.other-machine { opacity: 0.78; }
+  .rack-trend-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .rack-trend-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
+  .rack-trend-day { font-size: 14px; font-weight: 700; color: var(--color-ink); white-space: nowrap; }
+  .rack-trend-nums { display: inline-flex; align-items: baseline; gap: 8px; flex: none; }
+  .rack-trend-net { font-size: 15px; font-weight: 700; }
+  .rack-trend-games { font-size: 12px; color: var(--color-slate); }
+  .rack-trend-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+  .rack-trend-badge { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 11px; font-weight: 600; line-height: 1.3; }
+  .rack-trend-badge.current { background: var(--color-pricing-blue); color: #fff; }
+  .rack-trend-badge.event { background: #fef3c7; border: 1px solid #ebd07c; color: #5c3700; }
+  .rack-trend-badge.other { background: #eef2f7; border: 1px solid #cbd5e1; color: #475569; }
+  .rack-trend-bar {
+    position: relative; display: block; width: 100%; height: 8px; border-radius: 9999px;
+    background: #eef2f7; overflow: hidden;
+  }
+  .rack-trend-bar.empty { background: #f4f6f9; }
+  .rack-trend-axis { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: #94a3b8; }
+  .rack-trend-fill { position: absolute; top: 0; bottom: 0; }
+  .rack-trend-fill.plus { left: 50%; background: #0071e3; border-radius: 0 9999px 9999px 0; }
+  .rack-trend-fill.minus { right: 50%; background: #d45510; border-radius: 9999px 0 0 9999px; }
+  .rack-trend-chev { flex: none; font-size: 18px; line-height: 1; color: #94a3b8; }
 </style>
 </head>
 <body>
@@ -624,6 +909,6 @@
   <p>差枚＝その日の総差枚（差枚がわかった台の合計）。メルヘンはグラフと最大持玉から計算した推定値を含みます（※は要確認）。P-STATIONは元グラフの差枚のほか、サイトセブンのグラフ画像やアナスロの情報からの推定値を含む場合があります。推定の計算方法は台・日付の詳細で確認できます。</p>
   <p>＊＝前日までに入力した記録がないイベント（当日以降の入力・時刻不明）。強かった機種＝1台あたりの平均回転数（2台以上ある機種）。</p>
 </footer>
-<script type="module" src="./app.mjs?v=cf2777682571"></script>
+<script type="module" src="./app.mjs?v=bff2c49b5eb6"></script>
 </body>
 </html>

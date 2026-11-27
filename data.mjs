@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail, meruhenNetHidden, roundHalfAway} from './net.mjs?v=cf2777682571';
+import {meruhenNetDetail, meruhenNetHidden, roundHalfAway} from './net.mjs?v=bff2c49b5eb6';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -295,6 +295,25 @@ export function daySummaries(doc) {
 export function calendarDay(racks, summary) {
   if (racks.length || !summary || summary.judged === 0) return {...dayNet(racks), summary: null};
   return {total: null, captured: 0, racks: summary.racks, judged: summary.judged, won: summary.won, winRate: true, summary};
+}
+
+/**
+ * カレンダーマスのヒートマップ強弱段階（色覚に配慮した青×橙の発散スケール用）。
+ * 店舗ごとの設置台数差に左右されないよう、1台あたりの平均差枚（total / captured）で判定する。
+ * 返り値：'plus-3'（+250枚〜）/'plus-2'（+100枚〜）/'plus-1'（+1枚〜）/'zero'（0枚）/
+ *         'minus-1'（-99〜-1枚）/'minus-2'（〜-100枚）/'rate'（勝率表示のみ）/'empty'（記録なし）。
+ */
+export function dayHeatLevel(net) {
+  if (!net) return 'empty';
+  if (net.winRate) return 'rate';
+  if (net.total == null || !(net.captured > 0)) return 'empty';
+  const avg = net.total / net.captured;
+  if (avg >= 250) return 'plus-3';
+  if (avg >= 100) return 'plus-2';
+  if (avg > 0) return 'plus-1';
+  if (avg === 0) return 'zero';
+  if (avg > -100) return 'minus-1';
+  return 'minus-2';
 }
 
 /**
@@ -1170,3 +1189,344 @@ export function storeDayComment(byDay, store, day, event = null) {
   }
   return dayComment({day, event, racks, recent});
 }
+
+/**
+ * 台詳細画面の「直近7日間の推移」（2026-11-27）。
+ * 同じ店・同じ台番号で [day] 以前に記録のある直近 [limit] 営業日（新しい順）を返す。
+ * 機種が入れ替わった前の日も sameMachine=false で区別して含め、履歴の断絶が分かるようにする。
+ */
+export function rackRecentHistory(byDay, events, store, rack, day, limit = 7) {
+  if (!(limit > 0)) return [];
+  const found = [];
+  for (const d of storeDays(byDay, store)) {
+    if (d > day) continue;
+    const r = (byDay.get(`${store}|${d}`) ?? []).find(x => x.rack === rack);
+    if (!r) continue;
+    found.push(r);
+    if (found.length >= limit) break;
+  }
+  const currentMachine = found[0]?.machine ?? null;
+  return found.map(r => ({
+    day: r.day,
+    machine: r.machine,
+    sameMachine: r.machine === currentMachine,
+    games: r.games,
+    bb: r.bb,
+    rb: r.rb,
+    net: r.net,
+    estimated: r.estimated === true,
+    needsCheck: r.needsCheck === true,
+    rainbow: r.rainbow === true,
+    won: rackWon(r),
+    event: eventLabel(events?.get(`${store}|${r.day}`)),
+  }));
+}
+
+/** 検索用の文字正規化：半角カナ・全角英数・カタカナ／ひらがな・大小文字・連続空白のゆらぎを吸収する。 */
+export function normalizeSearchText(text) {
+  return String(text ?? '')
+    .normalize('NFKC')
+    .replace(/[\u30a1-\u30f6]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60))
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * 機種名・台番号のクイック検索（2026-11-27）。
+ * 対象日配列 [days] に含まれる記録から機種別・台番号別に集計し、クエリに一致する一覧を返す。
+ * 機種名は半角カナ→全角カナ（displayMachineName）で統一し、表記ゆれを1つにまとめる。
+ */
+export function searchStoreEntities(byDay, store, days, query = '') {
+  const orderedDays = [...new Set(days)].sort().reverse();
+  const machineMap = new Map();
+  const rackMap = new Map();
+  for (const day of orderedDays) {
+    const list = byDay.get(`${store}|${day}`);
+    if (!list?.length) continue;
+    for (const r of list) {
+      const mName = displayMachineName(r.machine);
+      let m = machineMap.get(mName);
+      if (!m) {
+        m = {
+          machine: mName, racksSet: new Set(), records: 0, gamesSum: 0,
+          totalNet: 0, captured: 0, judged: 0, won: 0, estimated: false,
+          latestDay: day, dayStats: new Map(),
+        };
+        machineMap.set(mName, m);
+      }
+      m.racksSet.add(r.rack);
+      m.records++;
+      m.gamesSum += r.games;
+      const w = rackWon(r);
+      if (w != null) m.judged++;
+      if (w) m.won++;
+      let ds = m.dayStats.get(day);
+      if (!ds) { ds = {total: 0, captured: 0, judged: 0, won: 0}; m.dayStats.set(day, ds); }
+      if (w != null) ds.judged++;
+      if (w) ds.won++;
+      if (r.net != null) {
+        m.captured++;
+        m.totalNet += r.net;
+        m.estimated ||= r.estimated === true;
+        ds.captured++;
+        ds.total += r.net;
+      }
+
+      let k = rackMap.get(r.rack);
+      if (!k) {
+        k = {
+          rack: r.rack, latestMachine: mName, latestDay: day,
+          daysCount: 0, plusDays: 0, judged: 0, totalNet: 0, captured: 0,
+          gamesSum: 0, rainbowDays: 0, estimated: false,
+        };
+        rackMap.set(r.rack, k);
+      }
+      k.daysCount++;
+      k.gamesSum += r.games;
+      if (w != null) k.judged++;
+      if (w) k.plusDays++;
+      if (r.rainbow) k.rainbowDays++;
+      if (r.net != null) {
+        k.captured++;
+        k.totalNet += r.net;
+        k.estimated ||= r.estimated === true;
+      }
+    }
+  }
+
+  const allMachines = [...machineMap.values()].map(m => {
+    let plusDays = 0;
+    for (const ds of m.dayStats.values()) {
+      if (ds.captured > 0 ? ds.total > 0 : ds.judged > 0 && ds.won * 2 > ds.judged) plusDays++;
+    }
+    return {
+      machine: m.machine,
+      daysCount: m.dayStats.size,
+      plusDays,
+      racks: m.racksSet.size,
+      records: m.records,
+      totalNet: m.captured ? m.totalNet : null,
+      captured: m.captured,
+      averageNet: m.captured ? roundHalfAway(m.totalNet / m.captured) : null,
+      averageGames: m.records ? Math.round(m.gamesSum / m.records) : 0,
+      judged: m.judged,
+      won: m.won,
+      winRatePct: m.judged ? Math.floor((200 * m.won + m.judged) / (2 * m.judged)) : null,
+      estimated: m.estimated,
+      latestDay: m.latestDay,
+    };
+  });
+  const byPopularity = (a, b) => b.records - a.records || (b.totalNet ?? -Infinity) - (a.totalNet ?? -Infinity) || a.machine.localeCompare(b.machine, 'ja');
+  allMachines.sort(byPopularity);
+
+  const norm = normalizeSearchText(query);
+  if (!norm) {
+    return {
+      query: '',
+      numericOnly: false,
+      featured: allMachines.slice(0, 8),
+      machines: allMachines,
+      racks: [],
+      totalRacks: 0,
+    };
+  }
+
+  const tokens = norm.split(' ').filter(Boolean);
+  const compactQuery = tokens.join('');
+  const machines = allMachines.filter(m => {
+    const nm = normalizeSearchText(m.machine);
+    const nmCompact = nm.replace(/ /g, '');
+    return tokens.every(t => nm.includes(t) || nmCompact.includes(t));
+  }).sort((a, b) => {
+    const na = normalizeSearchText(a.machine).replace(/ /g, '');
+    const nb = normalizeSearchText(b.machine).replace(/ /g, '');
+    const ra = na === compactQuery ? 0 : na.startsWith(compactQuery) ? 1 : 2;
+    const rb = nb === compactQuery ? 0 : nb.startsWith(compactQuery) ? 1 : 2;
+    return ra - rb || byPopularity(a, b);
+  });
+
+  const strippedRack = norm.replace(/^(?:#|no\.?)|[番台\s]/g, '');
+  const numericOnly = /^\d+$/.test(strippedRack);
+  const digits = numericOnly ? strippedRack : (/\d+/.exec(norm)?.[0] ?? '');
+  let racks = [];
+  let totalRacks = 0;
+  if (digits) {
+    const matched = [...rackMap.values()].filter(k => String(k.rack).includes(digits)).map(k => ({
+      rack: k.rack,
+      latestMachine: k.latestMachine,
+      latestDay: k.latestDay,
+      daysCount: k.daysCount,
+      plusDays: k.plusDays,
+      judged: k.judged,
+      totalNet: k.captured ? k.totalNet : null,
+      captured: k.captured,
+      averageGames: k.daysCount ? Math.round(k.gamesSum / k.daysCount) : 0,
+      rainbowDays: k.rainbowDays,
+      estimated: k.estimated,
+    })).sort((a, b) => {
+      const sa = String(a.rack), sb = String(b.rack);
+      const ra = sa === digits ? 0 : sa.startsWith(digits) ? 1 : 2;
+      const rb = sb === digits ? 0 : sb.startsWith(digits) ? 1 : 2;
+      return ra - rb || a.rack - b.rack;
+    });
+    totalRacks = matched.length;
+    racks = matched.slice(0, 50);
+  }
+
+  return {query: norm, numericOnly, featured: [], machines, racks, totalRacks};
+}
+
+/** 指定機種の日別推移（新しい順）と期間サマリー。 */
+export function machineDayHistory(byDay, events, store, machineName, days) {
+  const target = displayMachineName(machineName);
+  const orderedDays = [...new Set(days)].sort().reverse();
+  const entries = [];
+  let plusDays = 0, totalRecords = 0, totalNet = 0, captured = 0, gamesSum = 0, judged = 0, won = 0, estimated = false;
+  for (const day of orderedDays) {
+    const list = (byDay.get(`${store}|${day}`) ?? []).filter(r => displayMachineName(r.machine) === target);
+    if (!list.length) continue;
+    const net = dayNet(list);
+    const est = list.some(r => r.net != null && r.estimated);
+    const avgNet = net.total != null && net.captured > 0 ? roundHalfAway(net.total / net.captured) : null;
+    const avgGames = averageGames(list);
+    const isPlus = net.total != null ? net.total > 0 : net.judged > 0 && net.won * 2 > net.judged;
+    if (isPlus) plusDays++;
+    totalRecords += list.length;
+    gamesSum += list.reduce((s, r) => s + r.games, 0);
+    judged += net.judged;
+    won += net.won;
+    if (net.total != null) {
+      totalNet += net.total;
+      captured += net.captured;
+      estimated ||= est;
+    }
+    entries.push({
+      day,
+      rawMachine: list[0].machine,
+      racks: list.length,
+      captured: net.captured,
+      total: net.total,
+      averageNet: avgNet,
+      averageGames: avgGames,
+      judged: net.judged,
+      won: net.won,
+      winRatePct: net.judged ? Math.floor((200 * net.won + net.judged) / (2 * net.judged)) : null,
+      rainbowCount: list.filter(r => r.rainbow).length,
+      estimated: est,
+      event: eventLabel(events?.get(`${store}|${day}`)),
+    });
+  }
+  return {
+    machine: target,
+    entries,
+    summary: {
+      days: entries.length,
+      plusDays,
+      totalRecords,
+      totalNet: captured ? totalNet : null,
+      captured,
+      averageNet: captured ? roundHalfAway(totalNet / captured) : null,
+      averageGames: totalRecords ? Math.round(gamesSum / totalRecords) : 0,
+      judged,
+      won,
+      winRatePct: judged ? Math.floor((200 * won + judged) / (2 * judged)) : null,
+      estimated,
+    },
+  };
+}
+
+/** 指定台番号の日別推移（新しい順）と期間サマリー。 */
+export function rackDayHistory(byDay, events, store, rack, days) {
+  const orderedDays = [...new Set(days)].sort().reverse();
+  const entries = [];
+  let plusDays = 0, judged = 0, totalNet = 0, captured = 0, gamesSum = 0, rainbowDays = 0, estimated = false;
+  for (const day of orderedDays) {
+    const r = (byDay.get(`${store}|${day}`) ?? []).find(x => x.rack === rack);
+    if (!r) continue;
+    const w = rackWon(r);
+    if (w != null) judged++;
+    if (w) plusDays++;
+    if (r.rainbow) rainbowDays++;
+    gamesSum += r.games;
+    if (r.net != null) {
+      totalNet += r.net;
+      captured++;
+      estimated ||= r.estimated === true;
+    }
+    entries.push({
+      day,
+      record: r,
+      machine: r.machine,
+      games: r.games,
+      bb: r.bb,
+      rb: r.rb,
+      net: r.net,
+      estimated: r.estimated === true,
+      needsCheck: r.needsCheck === true,
+      rainbow: r.rainbow === true,
+      won: w,
+      event: eventLabel(events?.get(`${store}|${day}`)),
+    });
+  }
+  return {
+    rack,
+    entries,
+    summary: {
+      days: entries.length,
+      plusDays,
+      judged,
+      totalNet: captured ? totalNet : null,
+      captured,
+      averageNet: captured ? roundHalfAway(totalNet / captured) : null,
+      averageGames: entries.length ? Math.round(gamesSum / entries.length) : 0,
+      rainbowDays,
+      estimated,
+      latestMachine: entries[0] ? displayMachineName(entries[0].machine) : '',
+    },
+  };
+}
+
+/**
+ * 各店舗の最新営業日を横並びで比較するまとめ（2026-11-27）。
+ * 最新営業日は台データ（byDay）とアナスロHTML集計（summaries）のうち最も新しい日（同日は byDay 優先＝calendarDay と同じ）。
+ */
+export function latestStoreComparison(byDay, summaries, events, stores) {
+  return stores.map(store => {
+    const daySet = new Set(storeDays(byDay, store));
+    if (summaries) {
+      for (const [key, s] of summaries) {
+        if (key.startsWith(`${store}|`) && s?.judged > 0) daySet.add(key.slice(store.length + 1));
+      }
+    }
+    const day = [...daySet].sort().at(-1) ?? null;
+    if (!day) {
+      return {
+        store, day: null, event: '', total: null, captured: 0, racks: 0,
+        judged: 0, won: 0, winRate: false, winRatePct: null, averageNet: null,
+        estimated: false, heat: 'empty', hasRacks: false, hasSummary: false,
+      };
+    }
+    const racks = byDay.get(`${store}|${day}`) ?? [];
+    const summary = summaries?.get(`${store}|${day}`);
+    const net = calendarDay(racks, summary);
+    return {
+      store,
+      day,
+      event: eventLabel(events?.get(`${store}|${day}`)),
+      total: net.total,
+      captured: net.captured,
+      racks: net.racks,
+      judged: net.judged,
+      won: net.won,
+      winRate: net.winRate,
+      winRatePct: net.judged > 0 ? Math.floor((200 * net.won + net.judged) / (2 * net.judged)) : null,
+      averageNet: net.total != null && net.captured > 0 ? roundHalfAway(net.total / net.captured) : null,
+      estimated: racks.some(r => r.net != null && r.estimated),
+      heat: dayHeatLevel(net),
+      hasRacks: racks.length > 0,
+      hasSummary: !!net.summary,
+    };
+  });
+}
+
