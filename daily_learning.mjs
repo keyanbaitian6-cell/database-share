@@ -1,6 +1,6 @@
 // 日次学習・採用中の候補（共有カレンダー）。PCが固定保存した候補をそのまま並べる。画面側で再学習・再計算しない。
 // 2026-11-12：PC・Android・iPhone閲覧ページと同じ順にそろえた（切り替え → 重要な注意 → 候補数 → 機種ごとの候補 → 開閉式の説明）。
-import {displayMachineName} from './data.mjs?v=cfc0d4cd7e29';
+import {displayMachineName} from './data.mjs?v=ab4efe3c08f3';
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export const DAILY_STORE_NAMES={nagamachiminami:'長町南',saiwaichou:'幸町','pscube:c740601:20':'P-STATION'};
 const WEEK='日月火水木金土';
@@ -122,8 +122,8 @@ export function dailyView(doc, store, target, now=Date.now()) {
     past:target<defaultDailyTarget(now)};
 }
 const METHOD_TEXT={
-  learned:'日次学習版：店舗ごとの判定で、将来の成績による改善を確認したため採用している方式です。',
-  current:'従来方式：これまでの翌日候補と同じ選び方です。日次学習版は、将来の成績で改善を確認するまで採用しません。'};
+  learned:'日次学習版：毎晩データを学習して更新する方式です。完全盲検の過去検証または将来の成績判定で採用し、28日ごとに成績を監視して悪化時は自動で従来方式へ切り戻します。',
+  current:'従来方式：これまでの翌日候補と同じ選び方です。この対象は、将来の成績で改善を確認するまで従来方式を維持します。'};
 export function dailyPanel(doc, store, target, now=Date.now(), stores=Object.keys(DAILY_STORE_NAMES), records=[]) {
   const models=cachedModelCodes(records,store), linkDay=dailyRackLinkDay(store,target,now);
   const v=dailyView(doc,store,target,now);
@@ -152,7 +152,7 @@ export function dailyPanel(doc, store, target, now=Date.now(), stores=Object.key
     <details class="more daily-more"><summary>処理状況・日次学習について</summary>
       ${[...v.mine.map(s=>`${DAILY_STORE_NAMES[store]??store}：${s}`),...v.general].map(s=>`<p>${esc(s)}</p>`).join('')||'<p>処理状況の記録はありません。</p>'}
       <p>PCで対象日の前日23:30〜当日23:30に保存した候補を表示します。画面を開いても予測を作り直しません。</p>
-      <p>採用は店舗ごとに、保存した予測の将来の成績で判定します。判定までは従来方式を採用します。</p></details>
+      <p>幸町（通常機種）・P-STATIONは完全盲検の過去検証に基づき日次学習版を採用し、28日ごとの自動切り戻しで監視しています。幸町バラエティと長町南は将来の成績で改善を確認するまで従来方式を維持します。</p></details>
     <p class="daily-footer">毎日学習しても、毎日の改善を保証しません。設定確率・勝率・期待収支を示すものではありません。</p>`;
 }
 
