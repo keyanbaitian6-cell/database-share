@@ -1,7 +1,7 @@
 // 閲覧専用の共有ページ（2026-10-09）のデータ：Driveのファイル（読むだけのスクリプトが返す）から、
 // 店ごとの台・日別の総差枚・イベント・その日のTOP10と強かった機種5選を作る。数え方は
 // database_android の dailyNet・calendarDaySummary・PC event_calendar と同じ。
-import {meruhenNetDetail, meruhenNetHidden, roundHalfAway} from './net.mjs?v=ab4efe3c08f3';
+import {meruhenNetDetail, meruhenNetHidden, roundHalfAway} from './net.mjs?v=2921d0a18ab5';
 
 export const MERUHEN_STORES = {
   nagamachiminami: {name: 'メルヘンワールド長町南店', short: '長町南'},
@@ -1255,14 +1255,17 @@ export function searchStoreEntities(byDay, store, days, query = '') {
     if (!list?.length) continue;
     for (const r of list) {
       const mName = displayMachineName(r.machine);
-      let m = machineMap.get(mName);
+      // 同じ機種かは machineIdentity でまとめる（2026-11-28 レビュー③。`L 北斗の拳` と `L+北斗の拳` を1件に）。
+      // 見出しは新しい日から数えるので、いちばん新しい日の名前（displayMachineName）。
+      const mKey = machineIdentity(r.machine);
+      let m = machineMap.get(mKey);
       if (!m) {
         m = {
           machine: mName, racksSet: new Set(), records: 0, gamesSum: 0,
           totalNet: 0, captured: 0, judged: 0, won: 0, estimated: false,
           latestDay: day, dayStats: new Map(),
         };
-        machineMap.set(mName, m);
+        machineMap.set(mKey, m);
       }
       m.racksSet.add(r.rack);
       m.records++;
@@ -1393,7 +1396,7 @@ export function machineDayHistory(byDay, events, store, machineName, days) {
   const entries = [];
   let plusDays = 0, totalRecords = 0, totalNet = 0, captured = 0, gamesSum = 0, judged = 0, won = 0, estimated = false;
   for (const day of orderedDays) {
-    const list = (byDay.get(`${store}|${day}`) ?? []).filter(r => displayMachineName(r.machine) === target);
+    const list = (byDay.get(`${store}|${day}`) ?? []).filter(r => sameMachineName(r.machine, machineName));
     if (!list.length) continue;
     const net = dayNet(list);
     const est = list.some(r => r.net != null && r.estimated);

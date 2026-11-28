@@ -1,7 +1,7 @@
-import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=ab4efe3c08f3';
-import {updateStatusLines} from './capture_health.mjs?v=ab4efe3c08f3';
-import {openDailyLearning, defaultDailyTarget} from './daily_learning.mjs?v=ab4efe3c08f3';
-import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=ab4efe3c08f3';
+import {RECOMMENDATION_TYPE, recommendationPlans, recommendationDays, recommendationRows, recommendationFace, RECOMMENDATION_FACES, recommendationResult, recommendationResultKey, mergeRecommendationResults, recommendationNotOlder, recommendationEditMs} from './recommendations.mjs?v=2921d0a18ab5';
+import {updateStatusLines} from './capture_health.mjs?v=2921d0a18ab5';
+import {openDailyLearning, defaultDailyTarget} from './daily_learning.mjs?v=2921d0a18ab5';
+import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, historyCell, historyEditKey, mergeHistoryCells, newHistoryCell} from './event_history.mjs?v=2921d0a18ab5';
 // 閲覧専用の共有ページ（お試し、2026-10-09。EVENT_CALENDAR.md「閲覧専用の共有ページ」）。
 // 読むだけのApps Script（database_android/tool/viewer_drive_script_readonly.gs）からDriveのファイルを読み、
 // イベントカレンダー（各日のイベント・総差枚）と、日付を押したときの差枚TOP50（11位からは折りたたみ）・強かった機種10選、
@@ -9,8 +9,8 @@ import {HISTORY_TYPES, parsePrivateHistory, historyDay, historySavedName, histor
 // 書き込むのは🌈だけ（2026-10-11、RAINBOW.md「共有ページから付ける」。スクリプトが database-rainbow-shared.json に足し込む）。
 // 差分読み込み用の日別キャッシュもIndexedDBに保存する。端末に覚える設定は接続先（スクリプトのID）・選んだ店・回っていない台の期間とゲーム数・バラエティ🌈の並べ方・付けた🌈だけで、
 // 利用者自身の閲覧ページ（database-viewer の保存名）とは別の名前を使う。スクリプトのIDはページに書かず、渡すリンクの # の後ろに付ける。
-import {fetchViewerDocument, readViewerHistory, rememberViewerHistory, viewerHistoryCovers} from './viewer_parts.mjs?v=ab4efe3c08f3';
-import {beginShareRefresh, prepareOffline, readOfflineMetadata, saveOfflineMetadata, shareRefreshHeld} from './offline.mjs?v=ab4efe3c08f3';
+import {fetchViewerDocument, readViewerHistory, rememberViewerHistory, viewerHistoryCovers} from './viewer_parts.mjs?v=2921d0a18ab5';
+import {beginShareRefresh, prepareOffline, readOfflineMetadata, saveOfflineMetadata, shareRefreshHeld} from './offline.mjs?v=2921d0a18ab5';
 import {
   MERUHEN_STORES, netEstimateNote, exchangeValue, calendarDay, dayHeatLevel, compactSigned, dayNet, daySummaries, daySummary, displayMachineName, eventLabel, indexRecords, lowGamesNote,
   meruhenRecords, mergeEvents, monthWeeks, pscubeRecords, scriptIdFrom, signed, storeLabel, TOP_RACKS_OPEN, viewerNameFrom, winRateText,
@@ -25,7 +25,7 @@ import {
   characterBirthdayCellLabel, characterBirthdaysOn, parseCharacterBirthdays,
   ALL_RACKS_SORTS, allRacksOrder, nonVarietyRacks, storeDayComment, eventComparison, machinePickups,
   rackRecentHistory, searchStoreEntities, machineDayHistory, rackDayHistory, latestStoreComparison, sameMachineName,
-} from './data.mjs?v=ab4efe3c08f3';
+} from './data.mjs?v=2921d0a18ab5';
 
 const ID_KEY = 'database-share-script-id';
 const STORE_KEY = 'database-share-store';
@@ -97,7 +97,7 @@ async function getJson(url) {
  */
 async function loadBirthdays() {
   try {
-    const response = await fetch('./character_birthdays.json?v=ab4efe3c08f3', {credentials: 'omit'});
+    const response = await fetch('./character_birthdays.json?v=2921d0a18ab5', {credentials: 'omit'});
     if (!response.ok) return;
     state.birthdays = parseCharacterBirthdays(await response.json());
     if (state.model) render();
@@ -642,7 +642,7 @@ function daysOfView(view) {
   if (view.kind === 'birthday') return [view.day];
   const all = storeDays(byDay, state.store);
   if (view.kind === 'historyMachine') return all.filter(d => has(state.store, d, x => x.machine === view.machine));
-  if (view.kind === 'searchMachineDay') return all.filter(d => has(state.store, d, x => displayMachineName(x.machine) === displayMachineName(view.machine)));
+  if (view.kind === 'searchMachineDay') return all.filter(d => has(state.store, d, x => sameMachineName(x.machine, view.machine)));
   if (view.kind === 'machine') return all.filter(d => has(state.store, d, x => sameMachineName(x.machine, view.machine)));
   return all;
 }
@@ -2078,7 +2078,7 @@ function openSearch() {
   const machineDayView = (view) => {
     const racks = state.model.byDay.get(`${state.store}|${view.day}`) ?? [];
     const target = displayMachineName(view.machine);
-    const list = racks.filter(r => displayMachineName(r.machine) === target).sort((a, b) => a.rack - b.rack);
+    const list = racks.filter(r => sameMachineName(r.machine, view.machine)).sort((a, b) => a.rack - b.rack);
     view.rackList = list;
     const netName = list.some(r => r.net != null && r.estimated) ? '推定差枚' : '差枚';
     const nets = list.filter(r => r.net != null);
